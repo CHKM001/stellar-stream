@@ -2,6 +2,7 @@ import cors from "cors";
 import { requestLogger } from "./middleware/requestLogger";
 import "dotenv/config";
 import express, { NextFunction, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import swaggerUi from "swagger-ui-express";
 import { z } from "zod";
 import {
@@ -10,7 +11,6 @@ import {
   sendValidationError,
 } from "./apiErrors";
 import { swaggerDocument } from "./swagger";
-
 import {
   countAllEvents,
   getAllEvents,
@@ -36,12 +36,6 @@ import {
   updateStreamStartAt,
 } from "./services/streamStore";
 import {
-  getGlobalEvents,
-  countAllEvents,
-  getStreamHistory,
-  getAllEvents,
-} from "./services/eventHistory";
-import {
   authMiddleware,
   generateChallenge,
   verifyChallengeAndIssueToken,
@@ -53,11 +47,8 @@ import {
   senderAccountIdSchema,
   streamIdSchema,
   updateStreamStartAtSchema,
-  webhookRegistrationSchema,
 } from "./validation/schemas";
 import { validateEnv } from "./config/validateEnv";
-
-
 
 const STREAM_STATUSES: StreamStatus[] = [
   "scheduled",
@@ -97,9 +88,28 @@ const listStreamsQuerySchema = z.object({
   limit: z
     .coerce.number()
     .int("limit must be an integer")
-    .min(1, "limit must be greater than or equal to 1")
+    .min(1, "limit must be an integer")
     .max(PAGINATION_MAX_LIMIT, `limit must be less than or equal to ${PAGINATION_MAX_LIMIT}`)
     .optional(),
+});
+
+const AUTH_CHALLENGE_RATE_LIMIT = Number(process.env.AUTH_CHALLENGE_RATE_LIMIT ?? 10);
+
+const authChallengeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: AUTH_CHALLENGE_RATE_LIMIT,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req: Request, res: Response) => {
+    const resetTime = (req as any).rateLimit?.resetTime;
+    const retryAfter = resetTime
+      ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
+      : 60;
+    res.set("Retry-After", String(Math.max(1, retryAfter)));
+    sendApiError(req, res, 429, "Too many requests. Please try again later.", {
+      code: "RATE_LIMIT_EXCEEDED",
+    });
+  },
 });
 
 app.use(cors());
@@ -233,7 +243,6 @@ app.get("/api/events", (req: Request, res: Response) => {
   res.json({ data, total, page, limit });
 });
 
-
 app.get("/api/streams/export.csv", (req: Request, res: Response) => {
   const parsedQuery = listStreamsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
@@ -313,7 +322,7 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
 
   const parsedQuery = listStreamsQuerySchema.safeParse(req.query);
   if (!parsedQuery.success) {
-    sendValidationError(res, parsedQuery.error.issues);
+    sendValidationError(req, res, parsedQuery.error.issues);
     return;
   }
   const query = parsedQuery.data;
@@ -324,7 +333,6 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
       progress: calculateProgress(stream),
     }));
 
-  // Apply filters
   if (query.status) {
     data = data.filter((stream) => stream.progress.status === query.status);
   }
@@ -350,7 +358,6 @@ app.get("/api/recipients/:accountId/streams", (req: Request, res: Response) => {
     });
   }
 
-  // Apply pagination
   const hasPage = req.query.page !== undefined;
   const hasLimit = req.query.limit !== undefined;
 
@@ -437,7 +444,7 @@ app.get("/api/senders/:accountId/streams", (req: Request, res: Response) => {
   });
 });
 
-app.get("/api/auth/challenge", (req: Request, res: Response) => {
+app.get("/api/auth/challenge", authChallengeLimiter, (req: Request, res: Response) => {
   const accountId = req.query.accountId;
   if (typeof accountId !== "string" || !accountId.trim()) {
     sendApiError(req, res, 400, "accountId query parameter is required.", {
@@ -450,7 +457,9 @@ app.get("/api/auth/challenge", (req: Request, res: Response) => {
     const challengeTransaction = generateChallenge(accountId.trim());
     res.json({ transaction: challengeTransaction });
   } catch (error: any) {
-
+    sendApiError(req, res, 400, error.message || "Failed to generate challenge", {
+      code: "CHALLENGE_ERROR",
+    });
   }
 });
 
@@ -467,7 +476,9 @@ app.post("/api/auth/token", (req: Request, res: Response) => {
     const token = verifyChallengeAndIssueToken(transaction);
     res.json({ token });
   } catch (error: any) {
-
+    sendApiError(req, res, 400, error.message || "Failed to verify challenge", {
+      code: "TOKEN_ERROR",
+    });
   }
 });
 
@@ -509,21 +520,25 @@ app.post(
 
     const stream = getStream(parsedId.value);
     if (!stream) {
-      res.status(404).json({ error: "Stream not found.", requestId: req.requestId });
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
       return;
     }
 
     const user = (req as any).user;
     if (stream.sender !== user.accountId) {
-      res.status(403).json({
-        error: "Only the sender can cancel this stream.",
-        requestId: req.requestId,
+      sendApiError(req, res, 403, "Only the sender can cancel this stream.", {
+        code: "FORBIDDEN",
       });
       return;
     }
 
     try {
-
+      const canceled = await cancelStream(parsedId.value);
+      if (!canceled) {
+        sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+        return;
+      }
+      res.json({ data: { ...canceled, progress: calculateProgress(canceled) } });
     } catch (error: any) {
       console.error("Failed to cancel stream:", error);
       const normalizedError = normalizeUnknownApiError(error, "Failed to cancel stream.");
@@ -546,18 +561,14 @@ app.patch(
 
     const existingStream = getStream(parsedId.value);
     if (!existingStream) {
-      res
-        .status(404)
-        .json({ error: "Stream not found.", requestId: req.requestId });
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
       return;
     }
 
     const user = (req as any).user;
-    if (user && existingStream.sender !== user.accountId) {
-      res.status(403).json({
-        error: "Only the stream sender can update the start time.",
+    if (existingStream.sender !== user.accountId) {
+      sendApiError(req, res, 403, "Only the stream sender can update the start time.", {
         code: "FORBIDDEN",
-        requestId: req.requestId,
       });
       return;
     }
@@ -568,39 +579,20 @@ app.patch(
       return;
     }
 
-    const stream = getStream(parsedId.value);
-    if (!stream) {
-      res.status(404).json({ error: "Stream not found.", requestId: req.requestId });
-      return;
-    }
-
-    const user = (req as any).user;
-    if (stream.sender !== user.accountId) {
-      res.status(403).json({
-        error: "Only the sender can update the start time.",
-        requestId: req.requestId,
-      });
-      return;
-    }
-
-    const now = Math.floor(Date.now() / 1000);
     const newStartAt = parsedBody.data.startAt;
 
-    return;
-  }
-
     try {
-  const updatedStream = updateStreamStartAt(parsedId.value, newStartAt);
-  res.json({ data: { ...updatedStream, progress: calculateProgress(updatedStream) } });
-} catch (error: any) {
-  const normalizedError = normalizeUnknownApiError(
-    error,
-    "Failed to update stream start time.",
-  );
-  sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
-    code: normalizedError.code ?? "INTERNAL_ERROR",
-  });
-}
+      const updatedStream = updateStreamStartAt(parsedId.value, newStartAt);
+      res.json({ data: { ...updatedStream, progress: calculateProgress(updatedStream) } });
+    } catch (error: any) {
+      const normalizedError = normalizeUnknownApiError(
+        error,
+        "Failed to update stream start time.",
+      );
+      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
+        code: normalizedError.code ?? "INTERNAL_ERROR",
+      });
+    }
   },
 );
 
@@ -694,20 +686,15 @@ app.get("/api/webhooks/dead-letters", authMiddleware, (req: Request, res: Respon
   }
 });
 
-
-
-
 async function startServer() {
-  // ── Validate environment first — exits with code 1 on bad config ──────
   const config = validateEnv();
 
   await initSoroban();
   await syncStreams();
 
-  // Initialize and start event indexer
   if (config.sorobanEnabled && config.contractId) {
     initIndexer(config.rpcUrl, config.contractId, config.networkPassphrase);
-    startIndexer(10000); // Poll every 10 seconds
+    startIndexer(10000);
     startReconciliationJob(
       Number(process.env.RECONCILIATION_INTERVAL_MS ?? 60000),
     );
