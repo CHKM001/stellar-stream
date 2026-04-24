@@ -17,6 +17,7 @@ const eventHistoryMocks = vi.hoisted(() => ({
   getGlobalEvents: vi.fn(),
   countAllEvents: vi.fn(),
   recordEvent: vi.fn(),
+  getStreamEventSummary: vi.fn(),
 }));
 
 vi.mock("./services/streamStore", () => streamStoreMocks);
@@ -214,6 +215,7 @@ beforeEach(() => {
   eventHistoryMocks.getGlobalEvents.mockReset();
   eventHistoryMocks.countAllEvents.mockReset();
   eventHistoryMocks.getStreamHistory.mockReset();
+  eventHistoryMocks.getStreamEventSummary.mockReset();
 });
 
 describe("GET /api/streams", () => {
@@ -569,5 +571,80 @@ describe("GET /api/events", () => {
 });
 
 
+  });
+});
+
+describe("GET /api/streams/:id/history/summary", () => {
+  const mockStream = {
+    id: "stream-1",
+    sender: SENDER_A,
+    recipient: RECIPIENT_1,
+    assetCode: "USDC",
+    totalAmount: 1000,
+    durationSeconds: 3600,
+    startAt: 1000,
+    createdAt: 900,
+  };
+
+  beforeEach(() => {
+    streamStoreMocks.getStream.mockReturnValue(mockStream);
+    streamStoreMocks.calculateProgress.mockReturnValue({
+      status: "active",
+      ratePerSecond: 0.27,
+      elapsedSeconds: 100,
+      vestedAmount: 27,
+      remainingAmount: 973,
+      percentComplete: 2.7,
+    });
+  });
+
+  it("returns counts for all event types", () => {
+    eventHistoryMocks.getStreamEventSummary.mockReturnValue({
+      created: 1,
+      claimed: 3,
+      canceled: 0,
+      start_time_updated: 1,
+    });
+
+    const res = request(app).get("/api/streams/stream-1/history/summary");
+    return res.then(({ status, body }: { status: number; body: any }) => {
+      expect(status).toBe(200);
+      expect(body.data).toEqual({
+        created: 1,
+        claimed: 3,
+        canceled: 0,
+        start_time_updated: 1,
+      });
+    });
+  });
+
+  it("returns all zeros when stream has no events", () => {
+    eventHistoryMocks.getStreamEventSummary.mockReturnValue({
+      created: 0,
+      claimed: 0,
+      canceled: 0,
+      start_time_updated: 0,
+    });
+
+    const res = request(app).get("/api/streams/stream-1/history/summary");
+    return res.then(({ status, body }: { status: number; body: any }) => {
+      expect(status).toBe(200);
+      expect(body.data).toEqual({
+        created: 0,
+        claimed: 0,
+        canceled: 0,
+        start_time_updated: 0,
+      });
+    });
+  });
+
+  it("returns 404 when stream does not exist", () => {
+    streamStoreMocks.getStream.mockReturnValue(undefined);
+
+    const res = request(app).get("/api/streams/nonexistent/history/summary");
+    return res.then(({ status, body }: { status: number; body: any }) => {
+      expect(status).toBe(404);
+      expect(body.error).toBeDefined();
+    });
   });
 });

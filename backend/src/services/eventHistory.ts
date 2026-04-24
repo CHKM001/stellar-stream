@@ -124,6 +124,40 @@ export function countAllEvents(eventType?: StreamEventType): number {
   return row.count;
 }
 
+export interface StreamEventSummary {
+  created: number;
+  claimed: number;
+  canceled: number;
+  start_time_updated: number;
+}
+
+export function getStreamEventSummary(streamId: string): StreamEventSummary {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT event_type, COUNT(*) as count
+       FROM stream_events
+       WHERE stream_id = ?
+       GROUP BY event_type`,
+    )
+    .all(streamId) as { event_type: string; count: number }[];
+
+  const summary: StreamEventSummary = {
+    created: 0,
+    claimed: 0,
+    canceled: 0,
+    start_time_updated: 0,
+  };
+
+  for (const row of rows) {
+    if (row.event_type in summary) {
+      summary[row.event_type as StreamEventType] = row.count;
+    }
+  }
+
+  return summary;
+}
+
 export function streamHasEvent(
   streamId: string,
   eventType: StreamEventType,
