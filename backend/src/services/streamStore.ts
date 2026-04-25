@@ -16,7 +16,7 @@ import { recordEventWithDb } from "./eventHistory";
 import { streamHasEvent } from "./eventHistory";
 import { triggerWebhook } from "./webhook";
 
-export type StreamStatus = "scheduled" | "active" | "completed" | "canceled";
+export type StreamStatus = "scheduled" | "active" | "paused" | "completed" | "canceled";
 
 export interface StreamInput {
   sender: string;
@@ -39,6 +39,8 @@ export interface StreamRecord {
   canceledAt?: number;
   completedAt?: number;
   refundedAmount?: number;
+  pausedAt?: number;
+  pausedDuration: number;
 }
 
 export interface StreamProgress {
@@ -63,6 +65,8 @@ interface StreamRow {
   completed_at: number | null;
   refunded_amount: number | null;
   archived_at: number | null;
+  paused_at: number | null;
+  paused_duration: number;
 }
 
 function rowToRecord(row: StreamRow): StreamRecord {
@@ -78,6 +82,8 @@ function rowToRecord(row: StreamRow): StreamRecord {
     canceledAt: row.canceled_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
     refundedAmount: row.refunded_amount ?? undefined,
+    pausedAt: row.paused_at ?? undefined,
+    pausedDuration: row.paused_duration ?? 0,
   };
 }
 
@@ -85,8 +91,8 @@ function upsertStream(record: StreamRecord): void {
   const db = getDb();
   db.prepare(
     `
-    INSERT INTO streams (id, sender, recipient, asset_code, total_amount, duration_seconds, start_at, created_at, canceled_at, completed_at, refunded_amount, archived_at)
-    VALUES (@id, @sender, @recipient, @assetCode, @totalAmount, @durationSeconds, @startAt, @createdAt, @canceledAt, @completedAt, @refundedAmount, @archivedAt)
+    INSERT INTO streams (id, sender, recipient, asset_code, total_amount, duration_seconds, start_at, created_at, canceled_at, completed_at, refunded_amount, archived_at, paused_at, paused_duration)
+    VALUES (@id, @sender, @recipient, @assetCode, @totalAmount, @durationSeconds, @startAt, @createdAt, @canceledAt, @completedAt, @refundedAmount, @archivedAt, @pausedAt, @pausedDuration)
     ON CONFLICT(id) DO UPDATE SET
       sender = excluded.sender,
       recipient = excluded.recipient,
@@ -98,7 +104,9 @@ function upsertStream(record: StreamRecord): void {
       canceled_at = excluded.canceled_at,
       completed_at = excluded.completed_at,
       refunded_amount = excluded.refunded_amount,
-      archived_at = excluded.archived_at
+      archived_at = excluded.archived_at,
+      paused_at = excluded.paused_at,
+      paused_duration = excluded.paused_duration
   `,
   ).run({
     id: record.id,
@@ -113,6 +121,8 @@ function upsertStream(record: StreamRecord): void {
     completedAt: record.completedAt ?? null,
     refundedAmount: record.refundedAmount ?? null,
     archivedAt: null,
+    pausedAt: record.pausedAt ?? null,
+    pausedDuration: record.pausedDuration ?? 0,
   });
 }
 
@@ -311,6 +321,8 @@ async function fetchOnChainStreamRecord(
     startAt: Number(streamData.start_time),
     createdAt: Number(streamData.start_time),
     canceledAt: streamData.canceled ? nowInSeconds() : undefined,
+    pausedAt: streamData.paused_at ? Number(streamData.paused_at) : undefined,
+    pausedDuration: Number(streamData.paused_duration ?? 0),
   };
 
   setCached(cacheKey, result, 5);
@@ -348,6 +360,9 @@ function computeStatus(stream: StreamRecord, at: number): StreamStatus {
   if (stream.completedAt !== undefined) {
     return "completed";
   }
+  if (stream.pausedAt !== undefined) {
+    return "paused";
+  }
   if (at < stream.startAt) {
     return "scheduled";
   }
@@ -366,7 +381,12 @@ export function calculateProgress(
     stream.canceledAt !== undefined
       ? Math.min(stream.canceledAt, streamEnd)
       : streamEnd;
-  const elapsed = Math.max(0, Math.min(at, effectiveEnd) - stream.startAt);
+
+  // When paused, vesting is frozen at the moment of pause.
+  const effectiveAt =
+    stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
+
+  const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
   const ratio = Math.min(1, elapsed / stream.durationSeconds);
   const vestedAmount = stream.totalAmount * ratio;
 
@@ -593,6 +613,7 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
     durationSeconds: input.durationSeconds,
     startAt,
     createdAt: nowInSeconds(),
+    pausedDuration: 0,
   };
 
   // Atomically write the stream row and the creation event.
@@ -828,8 +849,66 @@ export async function cancelStream(
   return stream;
 }
 
-export function updateStreamStartAt(
-  id: string,
+export function pauseStream(id: string): StreamRecord {
+  const stream = getStream(id);
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const status = computeStatus(stream, nowInSeconds());
+  if (status !== "active") {
+    const err: any = new Error("Only active streams can be paused.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  stream.pausedAt = nowInSeconds();
+  const db = getDb();
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "paused", stream.pausedAt!, stream.sender);
+  })();
+
+  triggerWebhook("paused", stream);
+  return stream;
+}
+
+export function resumeStream(id: string): StreamRecord {
+  const stream = getStream(id);
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (stream.pausedAt === undefined) {
+    const err: any = new Error("Stream is not paused.");
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const now = nowInSeconds();
+  const elapsed = now - stream.pausedAt;
+  stream.pausedDuration = (stream.pausedDuration ?? 0) + elapsed;
+  // Extend the effective duration so the recipient doesn't lose vesting time.
+  stream.durationSeconds += elapsed;
+  stream.pausedAt = undefined;
+
+  const db = getDb();
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "resumed", now, stream.sender, undefined, {
+      pausedDuration: stream.pausedDuration,
+    });
+  })();
+
+  triggerWebhook("resumed", stream);
+  return stream;
+}
+
+export function updateStreamStartAt(  id: string,
   newStartAt: number,
 ): StreamRecord {
   const stream = getStream(id);

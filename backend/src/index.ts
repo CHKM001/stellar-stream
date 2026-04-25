@@ -34,7 +34,9 @@ import {
   listStreams,
   listStreamsByRecipient,
   listStreamsBySender,
+  pauseStream,
   refreshStreamStatuses,
+  resumeStream,
   StreamStatus,
   syncStreams,
   updateStreamStartAt,
@@ -62,6 +64,7 @@ import { validateEnv } from "./config/validateEnv";
 const STREAM_STATUSES: StreamStatus[] = [
   "scheduled",
   "active",
+  "paused",
   "completed",
   "canceled",
 ];
@@ -548,10 +551,84 @@ app.post(
 
     try {
       const canceledStream = await cancelStream(parsedId.value);
+      if (!canceledStream) {
+        sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+        return;
+      }
       res.json({ data: { ...canceledStream, progress: calculateProgress(canceledStream) } });
     } catch (error: any) {
       console.error("Failed to cancel stream:", error);
       const normalizedError = normalizeUnknownApiError(error, "Failed to cancel stream.");
+      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
+        code: normalizedError.code ?? "INTERNAL_ERROR",
+      });
+    }
+  },
+);
+
+// POST /api/streams/:id/pause — sender pauses an active stream
+app.post(
+  "/api/streams/:id/pause",
+  authMiddleware,
+  (req: Request, res: Response) => {
+    const parsedId = parseStreamId(req.params.id);
+    if (!parsedId.ok) {
+      sendValidationError(req, res, parsedId.issues);
+      return;
+    }
+
+    const stream = getStream(parsedId.value);
+    if (!stream) {
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
+    const user = (req as any).user;
+    if (stream.sender !== user.accountId) {
+      sendApiError(req, res, 403, "Only the sender can pause this stream.", { code: "FORBIDDEN" });
+      return;
+    }
+
+    try {
+      const updated = pauseStream(parsedId.value);
+      res.json({ data: { ...updated, progress: calculateProgress(updated) } });
+    } catch (error: any) {
+      const normalizedError = normalizeUnknownApiError(error, "Failed to pause stream.");
+      sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
+        code: normalizedError.code ?? "INTERNAL_ERROR",
+      });
+    }
+  },
+);
+
+// POST /api/streams/:id/resume — sender resumes a paused stream
+app.post(
+  "/api/streams/:id/resume",
+  authMiddleware,
+  (req: Request, res: Response) => {
+    const parsedId = parseStreamId(req.params.id);
+    if (!parsedId.ok) {
+      sendValidationError(req, res, parsedId.issues);
+      return;
+    }
+
+    const stream = getStream(parsedId.value);
+    if (!stream) {
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
+    const user = (req as any).user;
+    if (stream.sender !== user.accountId) {
+      sendApiError(req, res, 403, "Only the sender can resume this stream.", { code: "FORBIDDEN" });
+      return;
+    }
+
+    try {
+      const updated = resumeStream(parsedId.value);
+      res.json({ data: { ...updated, progress: calculateProgress(updated) } });
+    } catch (error: any) {
+      const normalizedError = normalizeUnknownApiError(error, "Failed to resume stream.");
       sendApiError(req, res, normalizedError.statusCode, normalizedError.message, {
         code: normalizedError.code ?? "INTERNAL_ERROR",
       });

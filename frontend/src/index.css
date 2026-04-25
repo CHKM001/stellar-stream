@@ -364,6 +364,10 @@ td {
   background: #fef2f2;
 }
 
+.badge-paused {
+  background: #fffbeb;
+}
+
 /* ── Health badges (derived, additive — never replace status label) ── */
 
 .badge-health {

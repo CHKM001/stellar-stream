@@ -5,6 +5,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StreamsTable } from '../components/StreamsTable'; 
 import { Stream } from '../types/stream'; 
 
+const noop = vi.fn();
+
 const mockStreams: Stream[] = [
   {
     id: '1',
@@ -31,6 +33,8 @@ const defaultProps = {
   filters: {},
   onFiltersChange: noop,
   onCancel: vi.fn().mockResolvedValue(undefined),
+  onPause: vi.fn().mockResolvedValue(undefined),
+  onResume: vi.fn().mockResolvedValue(undefined),
   onEditStartTime: noop,
 };
 
@@ -45,6 +49,8 @@ describe('StreamsTable Component', () => {
         filters={{ status: 'active', sender: '', recipient: '' }}
         onFiltersChange={vi.fn()}
         onCancel={vi.fn()}
+        onPause={vi.fn().mockResolvedValue(undefined)}
+        onResume={vi.fn().mockResolvedValue(undefined)}
         onEditStartTime={vi.fn()}
       />
     );
@@ -61,6 +67,8 @@ describe('StreamsTable Component', () => {
         filters={{ status: 'active', sender: '', recipient: '' }}
         onFiltersChange={vi.fn()}
         onCancel={vi.fn()}
+        onPause={vi.fn().mockResolvedValue(undefined)}
+        onResume={vi.fn().mockResolvedValue(undefined)}
         onEditStartTime={vi.fn()}
       />
     );

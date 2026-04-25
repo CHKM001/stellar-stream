@@ -20,6 +20,8 @@ import {
   createStream,
   listOpenIssues,
   listStreams,
+  pauseStream,
+  resumeStream,
   updateStreamStartAt,
 } from "./services/api";
 import { ListStreamsFilters } from "./services/api";
@@ -207,6 +209,34 @@ function App() {
     }
   }
 
+  async function handlePause(streamId: string): Promise<void> {
+    try {
+      await pauseStream(streamId);
+      await refreshStreams(apiFilters);
+      showToast("Stream paused", "info");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        showToast(`Pause failed (${err.statusCode}): ${err.message}`, "error");
+        return;
+      }
+      showToast(err instanceof Error ? err.message : "Failed to pause the stream.", "error");
+    }
+  }
+
+  async function handleResume(streamId: string): Promise<void> {
+    try {
+      await resumeStream(streamId);
+      await refreshStreams(apiFilters);
+      showToast("Stream resumed", "success");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        showToast(`Resume failed (${err.statusCode}): ${err.message}`, "error");
+        return;
+      }
+      showToast(err instanceof Error ? err.message : "Failed to resume the stream.", "error");
+    }
+  }
+
   async function handleUpdateStartTime(streamId: string, nextStartAt: number) {
     try {
       await updateStreamStartAt(streamId, nextStartAt);
@@ -316,6 +346,8 @@ function App() {
                 setFilter("assetCode", next.asset ?? defaultStreamFilters.assetCode);
               }}
               onCancel={handleCancel}
+              onPause={handlePause}
+              onResume={handleResume}
               onEditStartTime={(stream, triggerRef) =>
                 setEditingStream({ stream, triggerRef })
               }

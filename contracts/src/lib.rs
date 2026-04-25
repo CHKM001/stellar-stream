@@ -15,6 +15,10 @@ pub struct Stream {
     pub start_time: u64,
     pub end_time: u64,
     pub canceled: bool,
+    /// Unix timestamp when the stream was paused, or 0 if not currently paused.
+    pub paused_at: u64,
+    /// Accumulated seconds the stream has been paused (across all pause/resume cycles).
+    pub paused_duration: u64,
 }
 
 #[contracttype]
@@ -48,6 +52,23 @@ pub struct StreamClaimed {
 pub struct StreamCanceled {
     pub stream_id: u64,
     pub sender: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamPaused {
+    pub stream_id: u64,
+    pub sender: Address,
+    pub paused_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamResumed {
+    pub stream_id: u64,
+    pub sender: Address,
+    pub resumed_at: u64,
+    pub paused_duration: u64,
 }
 
 #[contract]
@@ -100,6 +121,8 @@ impl StellarStreamContract {
             start_time,
             end_time,
             canceled: false,
+            paused_at: 0,
+            paused_duration: 0,
         };
 
         env.storage()
@@ -189,8 +212,77 @@ impl StellarStreamContract {
         amount
     }
 
-    pub fn cancel(env: Env, stream_id: u64, sender: Address) {
+    pub fn pause(env: Env, stream_id: u64, sender: Address) {
         let mut stream = read_stream(&env, stream_id);
+        if stream.sender != sender {
+            panic!("sender mismatch");
+        }
+        sender.require_auth();
+
+        if stream.canceled {
+            panic!("stream is canceled");
+        }
+        if stream.paused_at != 0 {
+            panic!("stream is already paused");
+        }
+
+        let now = env.ledger().timestamp();
+        if now >= stream.end_time {
+            panic!("stream has already ended");
+        }
+
+        stream.paused_at = now;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Stream(stream_id), &stream);
+
+        env.events().publish(
+            (symbol_short!("Stream"), symbol_short!("Paused")),
+            StreamPaused {
+                stream_id,
+                sender,
+                paused_at: now,
+            },
+        );
+    }
+
+    pub fn resume(env: Env, stream_id: u64, sender: Address) {
+        let mut stream = read_stream(&env, stream_id);
+        if stream.sender != sender {
+            panic!("sender mismatch");
+        }
+        sender.require_auth();
+
+        if stream.canceled {
+            panic!("stream is canceled");
+        }
+        if stream.paused_at == 0 {
+            panic!("stream is not paused");
+        }
+
+        let now = env.ledger().timestamp();
+        let elapsed_pause = now - stream.paused_at;
+        stream.paused_duration += elapsed_pause;
+        // Extend end_time so the recipient doesn't lose vesting time.
+        stream.end_time += elapsed_pause;
+        stream.paused_at = 0;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Stream(stream_id), &stream);
+
+        env.events().publish(
+            (symbol_short!("Stream"), symbol_short!("Resumed")),
+            StreamResumed {
+                stream_id,
+                sender,
+                resumed_at: now,
+                paused_duration: stream.paused_duration,
+            },
+        );
+    }
+
+    pub fn cancel(env: Env, stream_id: u64, sender: Address) {        let mut stream = read_stream(&env, stream_id);
         if stream.sender != sender {
             panic!("sender mismatch");
         }
@@ -249,10 +341,17 @@ fn vested_amount(stream: &Stream, at_time: u64) -> i128 {
         return 0;
     }
 
-    let effective_time = if at_time >= stream.end_time {
-        stream.end_time
+    // If currently paused, treat at_time as the moment it was paused.
+    let effective_now = if stream.paused_at != 0 && at_time > stream.paused_at {
+        stream.paused_at
     } else {
         at_time
+    };
+
+    let effective_time = if effective_now >= stream.end_time {
+        stream.end_time
+    } else {
+        effective_now
     };
 
     let elapsed = effective_time - stream.start_time;
