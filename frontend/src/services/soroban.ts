@@ -63,3 +63,16 @@ export async function claimStream(
 
   return response.json() as Promise<ClaimResponse>;
 }
+
+/** Named error class for on-chain claim failures, carrying a machine-readable code. */
+export class SorobanClaimError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "SorobanClaimError";
+    this.code = code;
+  }
+}
+
+/** Alias for claimStream — kept for backwards compatibility with existing tests. */
+export const claimOnChain = claimStream;
