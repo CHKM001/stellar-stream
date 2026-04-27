@@ -472,7 +472,7 @@ app.get("/api/auth/challenge", (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/auth/token", (req: Request, res: Response) => {
+app.post("/api/auth/token", async (req: Request, res: Response) => {
   const transaction = req.body?.transaction;
   if (typeof transaction !== "string" || !transaction.trim()) {
     sendApiError(req, res, 400, "transaction in body is required.", {
@@ -482,7 +482,7 @@ app.post("/api/auth/token", (req: Request, res: Response) => {
   }
 
   try {
-    const token = verifyChallengeAndIssueToken(transaction);
+    const token = await verifyChallengeAndIssueToken(transaction);
     res.json({ token });
   } catch (error: any) {
     console.error("Failed to verify challenge:", error);

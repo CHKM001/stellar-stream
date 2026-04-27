@@ -48,6 +48,7 @@ const envSchema = z.object({
   SERVER_SIGNING_KEY: z.string().optional(),
   DOMAIN: z.string().optional().default("localhost"),
   SOROBAN_DISABLED: z.string().optional(),
+  HORIZON_URL: z.string().optional().default("https://horizon-testnet.stellar.org"),
 });
 
 export interface ValidatedConfig {
@@ -64,6 +65,7 @@ export interface ValidatedConfig {
   jwtSecret: string;
   serverSigningKey: string | null;
   domain: string;
+  horizonUrl: string;
 }
 
 export function validateEnv(): ValidatedConfig {
@@ -188,5 +190,6 @@ export function validateEnv(): ValidatedConfig {
     jwtSecret: env.JWT_SECRET,
     serverSigningKey: env.SERVER_SIGNING_KEY || null,
     domain: env.DOMAIN,
+    horizonUrl: env.HORIZON_URL,
   };
 }
