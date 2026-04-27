@@ -84,6 +84,7 @@ function rowToRecord(row: StreamRow): StreamRecord {
     refundedAmount: row.refunded_amount ?? undefined,
     pausedAt: row.paused_at ?? undefined,
     pausedDuration: row.paused_duration ?? 0,
+    pausedDuration: row.paused_duration,
   };
 }
 
@@ -369,6 +370,9 @@ function computeStatus(stream: StreamRecord, at: number): StreamStatus {
   if (at >= stream.startAt + stream.durationSeconds) {
     return "completed";
   }
+  if (stream.pausedAt !== undefined) {
+    return "active"; // Or could be a "paused" status if we want to add it
+  }
   return "active";
 }
 
@@ -377,6 +381,13 @@ export function calculateProgress(
   at = nowInSeconds(),
 ): StreamProgress {
   const streamEnd = stream.startAt + stream.durationSeconds;
+  
+  // Calculate paused duration including current pause if active
+  let pausedDuration = stream.pausedDuration;
+  if (stream.pausedAt !== undefined) {
+    pausedDuration += Math.max(0, at - stream.pausedAt);
+  }
+
   const effectiveEnd =
     stream.canceledAt !== undefined
       ? Math.min(stream.canceledAt, streamEnd)
@@ -387,6 +398,10 @@ export function calculateProgress(
     stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
 
   const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
+      ? Math.min(stream.canceledAt, streamEnd + pausedDuration)
+      : streamEnd + pausedDuration;
+  
+  const elapsed = Math.max(0, Math.min(at, effectiveEnd) - stream.startAt - pausedDuration);
   const ratio = Math.min(1, elapsed / stream.durationSeconds);
   const vestedAmount = stream.totalAmount * ratio;
 
@@ -642,6 +657,104 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
   // must never roll back an already-persisted stream.
   triggerWebhook("created", stream);
   return stream;
+}
+
+export async function pauseStream(id: string): Promise<StreamRecord | undefined> {
+  const stream = getStream(id);
+  if (!stream || stream.pausedAt !== undefined || stream.canceledAt !== undefined || stream.completedAt !== undefined) {
+    return stream;
+  }
+
+  const sorobanContext = getSorobanContext();
+  if (sorobanContext && rpcServer && serverKeypair) {
+    const sourceAccount = await rpcServer.getAccount(serverKeypair.publicKey());
+    const tx = sorobanContext.contract.call(
+      "pause_stream",
+      nativeToScVal(parseInt(id), { type: "u64" }),
+    );
+
+    const built = await rpcServer.prepareTransaction(
+      new TransactionBuilder(sourceAccount, {
+        fee: "1000",
+        networkPassphrase: process.env.NETWORK_PASSPHRASE || Networks.TESTNET,
+      })
+        .addOperation(tx)
+        .setTimeout(30)
+        .build(),
+    );
+
+    built.sign(serverKeypair);
+    const sendRes = await retryWithBackoff(() => rpcServer!.sendTransaction(built));
+    if (sendRes.status === "PENDING") {
+      let txResult;
+      let attempts = 0;
+      while (attempts < 10) {
+        txResult = await retryWithBackoff(() => rpcServer!.getTransaction(sendRes.hash));
+        if (txResult.status !== "NOT_FOUND") break;
+        await new Promise((r) => setTimeout(r, 1000));
+        attempts++;
+      }
+    }
+  }
+
+  const now = nowInSeconds();
+  const db = getDb();
+  db.prepare("UPDATE streams SET paused_at = ? WHERE id = ?").run(now, id);
+  
+  invalidateCache(`stream:${id}`);
+  return getStream(id);
+}
+
+export async function resumeStream(id: string): Promise<StreamRecord | undefined> {
+  const stream = getStream(id);
+  if (!stream || stream.pausedAt === undefined) {
+    return stream;
+  }
+
+  const sorobanContext = getSorobanContext();
+  if (sorobanContext && rpcServer && serverKeypair) {
+    const sourceAccount = await rpcServer.getAccount(serverKeypair.publicKey());
+    const tx = sorobanContext.contract.call(
+      "resume_stream",
+      nativeToScVal(parseInt(id), { type: "u64" }),
+    );
+
+    const built = await rpcServer.prepareTransaction(
+      new TransactionBuilder(sourceAccount, {
+        fee: "1000",
+        networkPassphrase: process.env.NETWORK_PASSPHRASE || Networks.TESTNET,
+      })
+        .addOperation(tx)
+        .setTimeout(30)
+        .build(),
+    );
+
+    built.sign(serverKeypair);
+    const sendRes = await retryWithBackoff(() => rpcServer!.sendTransaction(built));
+    if (sendRes.status === "PENDING") {
+      let txResult;
+      let attempts = 0;
+      while (attempts < 10) {
+        txResult = await retryWithBackoff(() => rpcServer!.getTransaction(sendRes.hash));
+        if (txResult.status !== "NOT_FOUND") break;
+        await new Promise((r) => setTimeout(r, 1000));
+        attempts++;
+      }
+    }
+  }
+
+  const now = nowInSeconds();
+  const additionalPausedDuration = Math.max(0, now - stream.pausedAt);
+  const newTotalPausedDuration = stream.pausedDuration + additionalPausedDuration;
+
+  const db = getDb();
+  db.prepare("UPDATE streams SET paused_at = NULL, paused_duration = ? WHERE id = ?").run(
+    newTotalPausedDuration,
+    id,
+  );
+
+  invalidateCache(`stream:${id}`);
+  return getStream(id);
 }
 
 export function refreshStreamStatuses(): number {
