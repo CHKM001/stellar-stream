@@ -266,6 +266,7 @@ impl StellarStreamContract {
                     total_amount: allocation,
                     start_time,
                     end_time,
+                    metadata: None,
                 },
             );
         }
