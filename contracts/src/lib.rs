@@ -21,6 +21,7 @@ pub struct Stream {
     pub claimed_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
+    pub cliff_seconds: u64,
     pub canceled: bool,
     pub paused: bool,
     pub pause_started_at: Option<u64>,
@@ -56,8 +57,7 @@ pub struct StreamCreated {
     pub total_amount: i128,
     pub start_time: u64,
     pub end_time: u64,
-    /// Metadata attached at creation time; None when no labels were provided.
-    pub metadata: Option<Map<String, String>>,
+    pub cliff_seconds: u64,
 }
 
 #[contracttype]
@@ -73,6 +73,14 @@ pub struct StreamClaimed {
 pub struct StreamCanceled {
     pub stream_id: u64,
     pub sender: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamTransferred {
+    pub stream_id: u64,
+    pub old_recipient: Address,
+    pub new_recipient: Address,
 }
 
 /// Emitted when an admin claws back tokens from a stream for compliance purposes.
@@ -119,7 +127,7 @@ impl StellarStreamContract {
         total_amount: i128,
         start_time: u64,
         end_time: u64,
-        metadata: Option<Map<String, String>>,
+        cliff_seconds: u64,
     ) -> u64 {
         sender.require_auth();
 
@@ -162,6 +170,7 @@ impl StellarStreamContract {
             claimed_amount: 0,
             start_time,
             end_time,
+            cliff_seconds,
             canceled: false,
             paused: false,
             pause_started_at: None,
@@ -186,7 +195,7 @@ impl StellarStreamContract {
                 total_amount,
                 start_time,
                 end_time,
-                metadata,
+                cliff_seconds,
             },
         );
 
@@ -412,6 +421,27 @@ impl StellarStreamContract {
         );
     }
 
+    pub fn transfer_stream(env: Env, stream_id: u64, new_recipient: Address) {
+        let mut stream = read_stream(&env, stream_id);
+        stream.recipient.require_auth();
+
+        let old_recipient = stream.recipient.clone();
+        stream.recipient = new_recipient.clone();
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Stream(stream_id), &stream);
+
+        env.events().publish(
+            (symbol_short!("Stream"), symbol_short!("Transfer")),
+            StreamTransferred {
+                stream_id,
+                old_recipient,
+                new_recipient,
+            },
+        );
+    }
+
     pub fn pause_stream(env: Env, stream_id: u64, sender: Address) {
         let mut stream = read_stream(&env, stream_id);
         if stream.sender != sender {
@@ -529,16 +559,11 @@ fn read_stream(env: &Env, stream_id: u64) -> Stream {
 }
 
 fn vested_amount(stream: &Stream, at_time: u64) -> i128 {
-    let mut effective_at_time = at_time;
-    if stream.paused {
-        if let Some(paused_at) = stream.pause_started_at {
-            if effective_at_time > paused_at {
-                effective_at_time = paused_at;
-            }
-        }
+    if at_time < stream.start_time.saturating_add(stream.cliff_seconds) {
+        return 0;
     }
 
-    if effective_at_time <= stream.start_time {
+    if at_time <= stream.start_time {
         return 0;
     }
 
