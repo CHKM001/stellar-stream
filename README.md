@@ -60,11 +60,11 @@ sequenceDiagram
     User->>Contract: create_stream()
     Contract->>Contract: Transfer tokens (escrow)
     Contract->>Contract: Store stream state
-    Contract-->>Stellar: Publish StreamCreated event
+    Contract-->>Stellar: Publish StreamCreated/Claimed/Canceled events
     loop Poll every 10s
         Indexer->>Stellar RPC: Fetch new events
-        Stellar RPC-->>Indexer: StreamCreated event
-        Indexer->>SQLite: Write stream + event
+        Stellar RPC-->>Indexer: Stream events (Created, Claimed, Canceled)
+        Indexer->>SQLite: Write stream + event(s)
     end
     Frontend->>API: GET /api/streams
     API->>SQLite: Query streams
@@ -87,27 +87,28 @@ sequenceDiagram
     participant Worker as Webhook Worker
     participant HTTP as HTTP Delivery
     participant Target as Webhook Target
-    participant DLQ as Dead Letter Queue
+    participant DLQ as Dead Letter Queue (webhook_dead_letters)
 
     Stream->>Worker: Event detected (created/claimed/canceled)
-    Worker->>SQLite: Queue webhook delivery (pending)
-    loop Retry every attempt
-        Worker->>HTTP: POST payload
-        HTTP->>Target: Deliver webhook (with HMAC signature)
-        alt Success (2xx)
-            Target-->>HTTP: 200 OK
-            HTTP-->>Worker: Success
-            Worker->>SQLite: Mark delivered
-        else Failure (timeout/5xx)
+    Worker->>SQLite: Queue webhook delivery (status='pending')
+    loop Retry with fixed delays [5s, 15s, 60s, 300s, 900s]
+        Worker->>HTTP: POST payload (application/json)
+        HTTP->>Target: Deliver webhook
+        Note right of HTTP: Header: X-Webhook-Signature: sha256=<hmac>
+        Target-->>HTTP: 200 OK (success)
+        HTTP-->>Worker: Success
+        Worker->>SQLite: Update status='success'
+        alt Failure (timeout/error/5xx)
             Target-->>HTTP: Error
             HTTP-->>Worker: Failure
-            Worker->>SQLite: Schedule retry (exponential backoff)
+            Worker->>SQLite: Schedule retry (next_retry_at)
         end
         SQLite->>Worker: next_retry_at
     end
     alt Max retries exceeded
-        Worker->>DLQ: Move to dead_letters
-        DLQ->>Admin: Alert for manual inspection
+        Worker->>DLQ: INSERT into webhook_dead_letters
+        Worker->>SQLite: DELETE from webhook_deliveries
+        Worker->>Logs: Error logged
     end
 ```
 
