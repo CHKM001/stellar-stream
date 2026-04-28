@@ -163,7 +163,7 @@ impl StellarStreamContract {
             canceled: false,
             paused: false,
             pause_started_at: None,
-            metadata: metadata.clone(),
+            metadata: None,
         };
 
         env.storage()
@@ -528,11 +528,17 @@ fn read_stream(env: &Env, stream_id: u64) -> Stream {
 }
 
 fn vested_amount(stream: &Stream, at_time: u64) -> i128 {
-    if at_time < stream.start_time.saturating_add(stream.cliff_seconds) {
+    let effective_at_time = if stream.paused {
+        stream.pause_started_at.unwrap_or(at_time)
+    } else {
+        at_time
+    };
+
+    if effective_at_time < stream.start_time.saturating_add(stream.cliff_seconds) {
         return 0;
     }
 
-    if at_time <= stream.start_time {
+    if effective_at_time <= stream.start_time {
         return 0;
     }
 
