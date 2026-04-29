@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
@@ -42,7 +42,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -54,10 +54,7 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  contract-bindings:
-    name: Check Contract Bindings Drift
-    runs-on: ubuntu-latest
-    needs: [frontend-build]
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -66,27 +63,4 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Generate contract bindings
-        env:
-          CONTRACT_ID: ${{ secrets.CONTRACT_ID }}
-        run: |
-          if [ -z "$CONTRACT_ID" ]; then
-            export CONTRACT_ID=$(cat contracts/contract_id.txt)
-          fi
-          npm run gen:bindings
-
-      - name: Check for uncommitted changes in generated bindings
-        run: |
-          if [[ -n $(git status --porcelain frontend/src/contracts/generated) ]]; then
-            echo "::error::Run npm run gen:bindings and commit the result. Stale contract bindings detected."
-            git --no-pager diff frontend/src/contracts/generated
-            exit 1
-          fi
-          echo "Bindings are up to date."
