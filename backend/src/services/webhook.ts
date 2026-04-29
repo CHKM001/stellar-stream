@@ -63,6 +63,33 @@ export function countDeadLetters(): number {
   return row.count;
 }
 
+export function requeueDeadLetter(id: number): boolean {
+  const db = getDb();
+  
+  return db.transaction(() => {
+    const deadLetter = db.prepare(`SELECT * FROM webhook_dead_letters WHERE id = ?`).get(id) as any;
+    if (!deadLetter) return false;
+
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      INSERT INTO webhook_deliveries (stream_id, event, payload, attempt, max_attempts, status, next_retry_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      deadLetter.stream_id,
+      deadLetter.event,
+      deadLetter.payload,
+      0, // reset attempt
+      5, // max_attempts
+      'pending',
+      now, // immediate retry
+      now
+    );
+
+    db.prepare(`DELETE FROM webhook_dead_letters WHERE id = ?`).run(id);
+    return true;
+  })();
+}
+
 export function getRetryDelaySeconds(attemptNumber: number): number {
   if (attemptNumber < 0 || attemptNumber >= RETRY_DELAYS.length) {
     return RETRY_DELAYS[RETRY_DELAYS.length - 1];

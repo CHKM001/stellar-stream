@@ -102,6 +102,8 @@ function migrate(): void {
 
     CREATE TABLE IF NOT EXISTS webhook_dead_letters (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      stream_id       TEXT NOT NULL,
+      event           TEXT NOT NULL,
       url             TEXT NOT NULL,
       payload         TEXT NOT NULL,
       last_error      TEXT,
@@ -128,4 +130,6 @@ function migrate(): void {
   addColumnIfMissing("streams", "paused_duration", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing("stream_archive", "paused_at", "INTEGER");
   addColumnIfMissing("stream_archive", "paused_duration", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing("webhook_dead_letters", "stream_id", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing("webhook_dead_letters", "event", "TEXT NOT NULL DEFAULT ''");
 }
