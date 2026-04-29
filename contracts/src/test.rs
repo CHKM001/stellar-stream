@@ -156,6 +156,80 @@ fn test_claim_fails_with_wrong_recipient() {
 }
 
 #[test]
+fn test_claim_after_stream_fully_completed() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &1000);
+    
+    // Create stream from time 0 to 1000
+    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &0, &None);
+    
+    // Move time past the end of the stream
+    env.ledger().with_mut(|l| l.timestamp = 1500);
+    
+    // Recipient should be able to claim the full total_amount
+    let claimed = client.claim(&stream_id, &recipient, &1000);
+    assert_eq!(claimed, 1000);
+    
+    // Verify the stream state
+    let stream = client.get_stream(&stream_id);
+    assert_eq!(stream.claimed_amount, 1000);
+    assert_eq!(stream.total_amount, 1000);
+    
+    // Verify claimable is now zero
+    let claimable = client.claimable(&stream_id, &1500);
+    assert_eq!(claimable, 0);
+}
+
+#[test]
+#[should_panic(expected = "amount exceeds claimable")]
+fn test_claim_on_canceled_stream() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &1000);
+    
+    // Create stream from time 0 to 1000
+    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &0, &None);
+    
+    // Move to midpoint (500 vested)
+    env.ledger().with_mut(|l| l.timestamp = 500);
+    
+    // Cancel the stream at midpoint
+    client.cancel(&stream_id, &sender);
+    
+    // Verify stream is canceled and end_time is adjusted
+    let stream = client.get_stream(&stream_id);
+    assert!(stream.canceled);
+    assert_eq!(stream.end_time, 500);
+    assert_eq!(stream.total_amount, 500); // Only 500 vested at cancel time
+    
+    // Recipient can claim the vested amount (500)
+    let claimed = client.claim(&stream_id, &recipient, &500);
+    assert_eq!(claimed, 500);
+    
+    // Move time forward
+    env.ledger().with_mut(|l| l.timestamp = 800);
+    
+    // Attempting to claim more should panic because nothing more is claimable
+    // (stream was canceled at 500, so only 500 total was vested)
+    client.claim(&stream_id, &recipient, &100);
+}
+
+#[test]
 #[should_panic(expected = "insufficient sender balance")]
 fn test_create_stream_fails_with_insufficient_sender_balance() {
     let env = Env::default();
@@ -889,7 +963,7 @@ fn test_transfer_stream_updates_recipient() {
 }
 
 #[test]
-
+fn test_claim_rapid_succession_prevents_double_pay() {
     let env = Env::default();
     env.mock_all_auths();
     let contract_id = env.register_contract(None, StellarStreamContract);
@@ -969,8 +1043,8 @@ fn test_metadata_multiple_labels_round_trip() {
     meta.set(String::from_str(&env, "project"), String::from_str(&env, "xlm-vesting"));
     meta.set(String::from_str(&env, "cost_center"), String::from_str(&env, "cc-42"));
 
-    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &0, &Some(meta.clone()),
-    );
+    let stream_id = client.create_stream(&sender, &recipient, &token, &1000, &0, &1000, &0, &Some(meta.clone()));
+
 
     let stream = client.get_stream(&stream_id);
     let stored = stream.metadata.unwrap();

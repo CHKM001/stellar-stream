@@ -2,7 +2,7 @@
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, symbol_short, token::Client as TokenClient, Address, Env,
-
+    Map, String, Vec,
 };
 
 const NATIVE_SENTINEL: &str = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
@@ -23,7 +23,11 @@ pub struct Stream {
     pub end_time: u64,
     pub cliff_seconds: u64,
     pub canceled: bool,
-
+    pub paused: bool,
+    pub pause_started_at: Option<u64>,
+    pub paused_at: u64,
+    pub paused_duration: u64,
+    pub metadata: Option<Map<String, String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -76,6 +80,36 @@ pub struct StreamCanceled {
 
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamPaused {
+    pub stream_id: u64,
+    pub sender: Address,
+    pub paused_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamResumed {
+    pub stream_id: u64,
+    pub sender: Address,
+    pub resumed_at: u64,
+    pub paused_duration: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StreamTransferred {
+    pub stream_id: u64,
+    pub old_recipient: Address,
+    pub new_recipient: Address,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClawbackExecuted {
+    pub stream_id: u64,
+    pub amount: i128,
+    pub recipient: Address,
+}
 
 #[contract]
 pub struct StellarStreamContract;
@@ -120,12 +154,11 @@ impl StellarStreamContract {
             panic!("end_time must be greater than start_time");
         }
 
-
+        let token_client = TokenClient::new(&env, &token);
         let sender_balance = token_client.balance(&sender);
         if sender_balance < total_amount {
             panic!("insufficient sender balance");
         }
-
         // Escrow: transfer total_amount from sender into this contract.
         let contract_address = env.current_contract_address();
         token_client.transfer(&sender, &contract_address, &total_amount);
@@ -147,7 +180,11 @@ impl StellarStreamContract {
             end_time,
             cliff_seconds,
             canceled: false,
-
+            paused: false,
+            pause_started_at: None,
+            paused_at: 0,
+            paused_duration: 0,
+            metadata: metadata.clone(),
         };
 
         env.storage()
@@ -236,6 +273,8 @@ impl StellarStreamContract {
                 canceled: false,
                 paused: false,
                 pause_started_at: None,
+                paused_at: 0,
+                paused_duration: 0,
                 metadata: None,
             };
             env.storage()
@@ -257,7 +296,7 @@ impl StellarStreamContract {
                     total_amount: allocation,
                     start_time,
                     end_time,
-
+                    cliff_seconds: 0,
                     metadata: None,
                 },
             );
@@ -371,7 +410,7 @@ impl StellarStreamContract {
         amount
     }
 
-
+    pub fn pause(env: Env, stream_id: u64, sender: Address) {
         let mut stream = read_stream(&env, stream_id);
         if stream.sender != sender {
             panic!("sender mismatch");
@@ -634,7 +673,8 @@ fn vested_amount(stream: &Stream, at_time: u64) -> i128 {
         return 0;
     }
 
-
+    let effective_now = if effective_at_time < stream.start_time {
+        stream.start_time
     } else {
         effective_at_time
     };
