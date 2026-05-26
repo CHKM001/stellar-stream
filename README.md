@@ -10,6 +10,9 @@ It includes:
 
 This repository is intentionally lightweight and easy to extend.
 
+For common questions and troubleshooting, see our [FAQ.md](FAQ.md).  
+For production setup and operations, see [DEPLOYMENT.md](DEPLOYMENT.md) and [RUNBOOK.md](RUNBOOK.md).
+
 ## 1) What The Project Does
 
 StellarStream models a payment stream where a sender allocates a total amount over a fixed duration.  
@@ -110,6 +113,44 @@ sequenceDiagram
         Worker->>SQLite: DELETE from webhook_deliveries
         Worker->>Logs: Error logged
     end
+```
+
+### Claim Flow Pipeline
+
+The following diagram details the full claim lifecycle, from UI interaction to on-chain execution and backend reconciliation:
+
+```mermaid
+sequenceDiagram
+    participant Recipient as Recipient (User)
+    participant Frontend as React Frontend
+    participant Freighter as Freighter Wallet
+    participant Contract as Soroban Contract
+    participant Indexer as Indexer Worker
+    participant SQLite as SQLite Database
+    participant API as Backend API
+
+    Recipient->>Frontend: Click "Claim"
+    Frontend->>API: GET /api/streams/:id (query claimable)
+    API-->>Frontend: Return claimable amount
+    Frontend->>Freighter: Request signature for claim(streamId, amount)
+    Freighter->>Recipient: Prompt for approval
+    Recipient-->>Freighter: Approve transaction
+    Freighter-->>Frontend: Signed Transaction
+    Frontend->>Contract: Submit claim() transaction
+    Contract->>Contract: Verify recipient & amount
+    Contract->>Contract: Transfer tokens from escrow
+    Contract-->>Stellar: Publish Claimed event
+    loop Poll every 10s
+        Indexer->>Stellar RPC: Fetch new events
+        Stellar RPC-->>Indexer: Claimed event
+        Indexer->>SQLite: Update stream (amount claimed)
+        Indexer->>SQLite: Record claim event
+    end
+    Frontend->>API: GET /api/streams/:id/history (poll)
+    API->>SQLite: Query stream_events
+    SQLite-->>API: Return updated history
+    API-->>Frontend: Return updated history
+    Frontend->>Recipient: Show "Claimed ✓"
 ```
 
 ## 3) Stream Math Model

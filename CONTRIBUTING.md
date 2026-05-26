@@ -2,6 +2,8 @@
 
 Thank you for your interest in contributing to StellarStream! This guide will help you get started with our development process.
 
+Check out the [FAQ.md](FAQ.md) for common contributor questions and troubleshooting tips.
+
 ## Development Setup
 
 1. Clone the repository
