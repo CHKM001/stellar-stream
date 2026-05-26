@@ -599,7 +599,7 @@ app.post(
 app.post(
   "/api/streams/:id/pause",
   authMiddleware,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
     if (!parsedId.ok) {
       sendValidationError(req, res, parsedId.issues);
@@ -619,7 +619,7 @@ app.post(
     }
 
     try {
-      const updated = pauseStream(parsedId.value);
+      const updated = await pauseStream(parsedId.value);
       res.json({ data: { ...updated, progress: calculateProgress(updated) } });
     } catch (error: any) {
       const normalizedError = normalizeUnknownApiError(error, "Failed to pause stream.");
@@ -634,7 +634,7 @@ app.post(
 app.post(
   "/api/streams/:id/resume",
   authMiddleware,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const parsedId = parseStreamId(req.params.id);
     if (!parsedId.ok) {
       sendValidationError(req, res, parsedId.issues);
@@ -654,7 +654,7 @@ app.post(
     }
 
     try {
-      const updated = resumeStream(parsedId.value);
+      const updated = await resumeStream(parsedId.value);
       res.json({ data: { ...updated, progress: calculateProgress(updated) } });
     } catch (error: any) {
       const normalizedError = normalizeUnknownApiError(error, "Failed to resume stream.");

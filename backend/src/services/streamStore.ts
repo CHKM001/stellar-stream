@@ -84,7 +84,6 @@ function rowToRecord(row: StreamRow): StreamRecord {
     refundedAmount: row.refunded_amount ?? undefined,
     pausedAt: row.paused_at ?? undefined,
     pausedDuration: row.paused_duration ?? 0,
-    pausedDuration: row.paused_duration,
   };
 }
 
@@ -152,7 +151,7 @@ export async function initSoroban() {
   }
 }
 
-function nowInSeconds(): number {
+export function nowInSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
@@ -367,11 +366,8 @@ function computeStatus(stream: StreamRecord, at: number): StreamStatus {
   if (at < stream.startAt) {
     return "scheduled";
   }
-  if (at >= stream.startAt + stream.durationSeconds) {
+  if (at >= stream.startAt + stream.durationSeconds + stream.pausedDuration) {
     return "completed";
-  }
-  if (stream.pausedAt !== undefined) {
-    return "active"; // Or could be a "paused" status if we want to add it
   }
   return "active";
 }
@@ -380,28 +376,29 @@ export function calculateProgress(
   stream: StreamRecord,
   at = nowInSeconds(),
 ): StreamProgress {
-  const streamEnd = stream.startAt + stream.durationSeconds;
-  
-  // Calculate paused duration including current pause if active
-  let pausedDuration = stream.pausedDuration;
-  if (stream.pausedAt !== undefined) {
-    pausedDuration += Math.max(0, at - stream.pausedAt);
+  if (stream.durationSeconds === 0) {
+    return {
+      status: "completed",
+      ratePerSecond: Infinity,
+      elapsedSeconds: 0,
+      vestedAmount: stream.totalAmount,
+      remainingAmount: 0,
+      percentComplete: 100,
+    };
   }
 
-  const effectiveEnd =
-    stream.canceledAt !== undefined
-      ? Math.min(stream.canceledAt, streamEnd)
-      : streamEnd;
+  const streamEnd = stream.startAt + stream.durationSeconds;
 
   // When paused, vesting is frozen at the moment of pause.
   const effectiveAt =
     stream.pausedAt !== undefined ? Math.min(at, stream.pausedAt) : at;
 
-  const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt);
-      ? Math.min(stream.canceledAt, streamEnd + pausedDuration)
-      : streamEnd + pausedDuration;
-  
-  const elapsed = Math.max(0, Math.min(at, effectiveEnd) - stream.startAt - pausedDuration);
+  const effectiveEnd =
+    stream.canceledAt !== undefined
+      ? Math.min(stream.canceledAt, streamEnd + stream.pausedDuration)
+      : streamEnd + stream.pausedDuration;
+
+  const elapsed = Math.max(0, Math.min(effectiveAt, effectiveEnd) - stream.startAt - stream.pausedDuration);
   const ratio = Math.min(1, elapsed / stream.durationSeconds);
   const vestedAmount = stream.totalAmount * ratio;
 
@@ -659,10 +656,19 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
   return stream;
 }
 
-export async function pauseStream(id: string): Promise<StreamRecord | undefined> {
+export async function pauseStream(id: string): Promise<StreamRecord> {
   const stream = getStream(id);
-  if (!stream || stream.pausedAt !== undefined || stream.canceledAt !== undefined || stream.completedAt !== undefined) {
-    return stream;
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const status = computeStatus(stream, nowInSeconds());
+  if (status !== "active") {
+    const err: any = new Error("Only active streams can be paused.");
+    err.statusCode = 400;
+    throw err;
   }
 
   const sorobanContext = getSorobanContext();
@@ -697,18 +703,30 @@ export async function pauseStream(id: string): Promise<StreamRecord | undefined>
     }
   }
 
-  const now = nowInSeconds();
+  stream.pausedAt = nowInSeconds();
   const db = getDb();
-  db.prepare("UPDATE streams SET paused_at = ? WHERE id = ?").run(now, id);
-  
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "paused", stream.pausedAt!, stream.sender);
+  })();
+
   invalidateCache(`stream:${id}`);
-  return getStream(id);
+  triggerWebhook("paused", stream);
+  return stream;
 }
 
-export async function resumeStream(id: string): Promise<StreamRecord | undefined> {
+export async function resumeStream(id: string): Promise<StreamRecord> {
   const stream = getStream(id);
-  if (!stream || stream.pausedAt === undefined) {
-    return stream;
+  if (!stream) {
+    const err: any = new Error("Stream not found.");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  if (stream.pausedAt === undefined) {
+    const err: any = new Error("Stream is not paused.");
+    err.statusCode = 400;
+    throw err;
   }
 
   const sorobanContext = getSorobanContext();
@@ -744,17 +762,23 @@ export async function resumeStream(id: string): Promise<StreamRecord | undefined
   }
 
   const now = nowInSeconds();
-  const additionalPausedDuration = Math.max(0, now - stream.pausedAt);
-  const newTotalPausedDuration = stream.pausedDuration + additionalPausedDuration;
+  const elapsed = now - stream.pausedAt;
+  stream.pausedDuration = (stream.pausedDuration ?? 0) + elapsed;
+  // Extend the effective duration so the recipient doesn't lose vesting time.
+  stream.durationSeconds += elapsed;
+  stream.pausedAt = undefined;
 
   const db = getDb();
-  db.prepare("UPDATE streams SET paused_at = NULL, paused_duration = ? WHERE id = ?").run(
-    newTotalPausedDuration,
-    id,
-  );
+  db.transaction(() => {
+    upsertStream(stream);
+    recordEventWithDb(db, stream.id, "resumed", now, stream.sender, undefined, {
+      pausedDuration: stream.pausedDuration,
+    });
+  })();
 
   invalidateCache(`stream:${id}`);
-  return getStream(id);
+  triggerWebhook("resumed", stream);
+  return stream;
 }
 
 export function refreshStreamStatuses(): number {
@@ -764,14 +788,14 @@ export function refreshStreamStatuses(): number {
   
   const toComplete = db.prepare(`
     SELECT * FROM streams 
-    WHERE canceled_at IS NULL AND completed_at IS NULL
+    WHERE canceled_at IS NULL AND completed_at IS NULL AND paused_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).all() as StreamRow[];
 
   
   const result = db.prepare(`
     UPDATE streams SET completed_at = ?
-    WHERE canceled_at IS NULL AND completed_at IS NULL
+    WHERE canceled_at IS NULL AND completed_at IS NULL AND paused_at IS NULL
       AND (start_at + duration_seconds) <= ?
   `).run(now, now);
 
@@ -962,64 +986,6 @@ export async function cancelStream(
   return stream;
 }
 
-export function pauseStream(id: string): StreamRecord {
-  const stream = getStream(id);
-  if (!stream) {
-    const err: any = new Error("Stream not found.");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  const status = computeStatus(stream, nowInSeconds());
-  if (status !== "active") {
-    const err: any = new Error("Only active streams can be paused.");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  stream.pausedAt = nowInSeconds();
-  const db = getDb();
-  db.transaction(() => {
-    upsertStream(stream);
-    recordEventWithDb(db, stream.id, "paused", stream.pausedAt!, stream.sender);
-  })();
-
-  triggerWebhook("paused", stream);
-  return stream;
-}
-
-export function resumeStream(id: string): StreamRecord {
-  const stream = getStream(id);
-  if (!stream) {
-    const err: any = new Error("Stream not found.");
-    err.statusCode = 404;
-    throw err;
-  }
-
-  if (stream.pausedAt === undefined) {
-    const err: any = new Error("Stream is not paused.");
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const now = nowInSeconds();
-  const elapsed = now - stream.pausedAt;
-  stream.pausedDuration = (stream.pausedDuration ?? 0) + elapsed;
-  // Extend the effective duration so the recipient doesn't lose vesting time.
-  stream.durationSeconds += elapsed;
-  stream.pausedAt = undefined;
-
-  const db = getDb();
-  db.transaction(() => {
-    upsertStream(stream);
-    recordEventWithDb(db, stream.id, "resumed", now, stream.sender, undefined, {
-      pausedDuration: stream.pausedDuration,
-    });
-  })();
-
-  triggerWebhook("resumed", stream);
-  return stream;
-}
 
 export function updateStreamStartAt(  id: string,
   newStartAt: number,
