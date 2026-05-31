@@ -340,6 +340,25 @@ input {
   overflow-x: auto;
 }
 
+.streams-table-scroll {
+  overflow: auto;
+}
+
+.streams-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: white;
+}
+
+.streams-table-head th {
+  background: white;
+}
+
+.streams-table-spacer td {
+  line-height: 0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
