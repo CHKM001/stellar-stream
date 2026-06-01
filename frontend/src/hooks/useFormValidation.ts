@@ -6,10 +6,18 @@ import {
   totalAmountSchema,
 } from "../validation/schemas";
 
+/**
+ * Validates if a string is a properly formatted Stellar account ID.
+ * @param value - The account ID string to validate.
+ * @returns True if valid, false otherwise.
+ */
 export function isStellarAccount(value: string): boolean {
   return STELLAR_ACCOUNT_REGEX.test(value.trim());
 }
 
+/**
+ * Represents validation errors for each field in the stream creation form.
+ */
 export interface FieldErrors {
   sender?: string;
   recipient?: string;
@@ -19,6 +27,9 @@ export interface FieldErrors {
   startInMinutes?: string;
 }
 
+/**
+ * Represents the raw string values from the stream creation form.
+ */
 export interface FormValues {
   sender: string;
   recipient: string;
@@ -28,6 +39,11 @@ export interface FormValues {
   startInMinutes: string;
 }
 
+/**
+ * Validates the stream creation form values against business rules and schemas.
+ * @param values - The form values to validate.
+ * @returns An object containing error messages for any invalid fields.
+ */
 export function validateForm(values: FormValues): FieldErrors {
   const errors: FieldErrors = {};
 

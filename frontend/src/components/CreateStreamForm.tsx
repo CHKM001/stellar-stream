@@ -469,6 +469,12 @@ export function CreateStreamForm({
         </div>
       </div>
 
+      {estimatedEndLabel && (
+        <div className="field-hint" style={{ marginTop: "-0.5rem", marginBottom: "1rem", color: "var(--color-success-text, #2e7d32)", fontWeight: 500 }}>
+          {estimatedEndLabel}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginTop: "1rem" }}>
         <button
           className="btn-primary"

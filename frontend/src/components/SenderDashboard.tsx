@@ -185,6 +185,11 @@ export function SenderDashboard({ senderAddress, onEditStartTime }: SenderDashbo
     );
   }
 
+  /**
+   * Prompts for confirmation and cancels a stream if the user agrees.
+   * 
+   * @param id - The unique identifier of the stream to cancel.
+   */
   const handleCancel = async (id: string) => {
     if (!window.confirm("Are you sure you want to cancel this stream?")) return;
     try {
