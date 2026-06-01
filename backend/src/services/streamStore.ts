@@ -29,6 +29,11 @@ export interface StreamInput {
   startAt?: number;
 }
 
+export interface StreamFeeEstimate {
+  feeStroops: number;
+  feeXlm: string;
+}
+
 export interface StreamRecord {
   id: string;
   sender: string;
@@ -261,6 +266,41 @@ async function simulateContractCall(
     .build();
 
   return rpcServer.simulateTransaction(tx);
+}
+
+const STROOPS_PER_XLM = 10_000_000;
+
+function formatStroopsAsXlm(stroops: number): string {
+  return (stroops / STROOPS_PER_XLM).toFixed(7);
+}
+
+function createStreamOperation(contractId: string, input: StreamInput, startAt: number) {
+  const endAt = startAt + input.durationSeconds;
+  const fakeToken = contractId;
+
+  return new Contract(contractId).call(
+    "create_stream",
+    new Address(input.sender).toScVal(),
+    new Address(input.recipient).toScVal(),
+    new Address(fakeToken).toScVal(),
+    nativeToScVal(input.totalAmount, { type: "i128" }),
+    nativeToScVal(startAt, { type: "u64" }),
+    nativeToScVal(endAt, { type: "u64" }),
+  );
+}
+
+function readSimulationFeeStroops(simRes: rpc.Api.SimulateTransactionResponse): number {
+  const rawFee =
+    (simRes as any).minResourceFee ??
+    (simRes as any).feeCharged ??
+    (simRes as any).result?.minResourceFee;
+  const feeStroops = Number(rawFee);
+
+  if (!Number.isFinite(feeStroops) || feeStroops < 0) {
+    throw new Error("Soroban RPC simulation did not return a valid fee estimate.");
+  }
+
+  return feeStroops;
 }
 
 async function fetchNextOnChainStreamId(
@@ -669,23 +709,8 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
     throw new Error("Backend not configured for Soroban.");
   }
 
-  const contract = new Contract(contractId);
-  const endAt = startAt + input.durationSeconds;
-
-  // Let's create an arbitrary testnet asset code for the token
-  const fakeToken = contractId;
-
   const sourceAccount = await rpcServer.getAccount(serverKeypair.publicKey());
-
-  const tx = new Contract(contractId).call(
-    "create_stream",
-    new Address(input.sender).toScVal(),
-    new Address(input.recipient).toScVal(),
-    new Address(fakeToken).toScVal(),
-    nativeToScVal(input.totalAmount, { type: "i128" }),
-    nativeToScVal(startAt, { type: "u64" }),
-    nativeToScVal(endAt, { type: "u64" }),
-  );
+  const tx = createStreamOperation(contractId, input, startAt);
 
   // We have to build and send this tx. Wait, doing this properly via building is long:
   const built = await rpcServer.prepareTransaction(
@@ -759,6 +784,37 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
   // must never roll back an already-persisted stream.
   triggerWebhook("created", stream);
   return stream;
+}
+
+export async function estimateCreateStreamFee(input: StreamInput): Promise<StreamFeeEstimate> {
+  const startAt = input.startAt ?? nowInSeconds();
+  const contractId = process.env.CONTRACT_ID;
+  const netPass =
+    process.env.NETWORK_PASSPHRASE || "Test SDF Network ; September 2015";
+
+  if (!contractId || !rpcServer || !serverKeypair) {
+    throw new Error("Backend not configured for Soroban.");
+  }
+
+  const sourceAccount = await rpcServer.getAccount(serverKeypair.publicKey());
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: "1000",
+    networkPassphrase: netPass,
+  })
+    .addOperation(createStreamOperation(contractId, input, startAt))
+    .setTimeout(30)
+    .build();
+
+  const simRes = await rpcServer.simulateTransaction(tx);
+  if (!rpc.Api.isSimulationSuccess(simRes)) {
+    throw new Error("Soroban RPC simulation failed.");
+  }
+
+  const feeStroops = readSimulationFeeStroops(simRes);
+  return {
+    feeStroops,
+    feeXlm: formatStroopsAsXlm(feeStroops),
+  };
 }
 
 

@@ -1,5 +1,9 @@
 import { useState, useEffect, FormEvent } from "react";
-import { getConfig } from "../services/api";
+import {
+  estimateCreateStreamFee,
+  getConfig,
+  type StreamFeeEstimate,
+} from "../services/api";
 // Form Draft Autosave [Verified]: Survives refresh, clears on submit/discard, aligns with fields.
 import { useDraftAutosave } from "../hooks/useDraftAutosave";
 import { CreateStreamPayload } from "../types/stream";
@@ -15,6 +19,11 @@ interface CreateStreamFormProps {
   onCreate: (payload: CreateStreamPayload) => Promise<void>;
   apiError?: string | null;
   walletAddress?: string | null;
+}
+
+interface FeePreview {
+  payload: CreateStreamPayload;
+  estimate: StreamFeeEstimate;
 }
 
 function humaniseApiError(raw: string): { title: string; hint: string } {
@@ -109,6 +118,28 @@ const INITIAL_VALUES: FormValues = {
 // Initial fallback if fetch hasn't completed or failed
 const DEFAULT_ALLOWED_ASSETS = ["USDC", "XLM"];
 
+function buildCreateStreamPayload(values: FormValues): CreateStreamPayload {
+  const now = Math.floor(Date.now() / 1000);
+  const offsetMinutes = Number(values.startInMinutes);
+  const startAt =
+    offsetMinutes > 0 ? now + Math.floor(offsetMinutes * 60) : undefined;
+
+  return {
+    sender: values.sender.trim(),
+    recipient: values.recipient.trim(),
+    assetCode: values.assetCode.trim().toUpperCase(),
+    totalAmount: Number(values.totalAmount),
+    durationSeconds: Math.floor(Number(values.durationMinutes) * 60),
+    startAt,
+  };
+}
+
+function formatStreamRate(payload: CreateStreamPayload): string {
+  const durationHours = payload.durationSeconds / 3600;
+  const ratePerHour = durationHours > 0 ? payload.totalAmount / durationHours : 0;
+  return `${ratePerHour.toFixed(6)} ${payload.assetCode}/hour`;
+}
+
 export function CreateStreamForm({
   onCreate,
   apiError,
@@ -151,6 +182,8 @@ export function CreateStreamForm({
   >({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [feePreview, setFeePreview] = useState<FeePreview | null>(null);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
   const errors: FieldErrors = validateForm(values);
   const formValid = isFormValid(errors);
@@ -168,29 +201,36 @@ export function CreateStreamForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitAttempted(true);
+    setSimulationError(null);
 
     if (!walletAddress) return;
     if (!formValid) return;
 
     setIsSubmitting(true);
     try {
-      const now = Math.floor(Date.now() / 1000);
-      const offsetMinutes = Number(values.startInMinutes);
-      const startAt =
-        offsetMinutes > 0 ? now + Math.floor(offsetMinutes * 60) : undefined;
+      const payload = buildCreateStreamPayload(values);
+      const estimate = await estimateCreateStreamFee(payload);
+      setFeePreview({ payload, estimate });
+    } catch (err) {
+      setSimulationError(
+        err instanceof Error ? err.message : "Failed to estimate network fee.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-      await onCreate({
-        sender: values.sender.trim(),
-        recipient: values.recipient.trim(),
-        assetCode: values.assetCode.trim().toUpperCase(),
-        totalAmount: Number(values.totalAmount),
-        durationSeconds: Math.floor(Number(values.durationMinutes) * 60),
-        startAt,
-      });
+  async function confirmCreateStream() {
+    if (!feePreview) return;
 
+    setIsSubmitting(true);
+    setSimulationError(null);
+    try {
+      await onCreate(feePreview.payload);
       clearDraft();
       setTouched({});
       setSubmitAttempted(false);
+      setFeePreview(null);
     } finally {
       setIsSubmitting(false);
     }
@@ -232,6 +272,7 @@ export function CreateStreamForm({
   })();
 
   return (
+    <>
     <form onSubmit={handleSubmit} noValidate>
       {hasDraft && (
         <div
@@ -485,15 +526,83 @@ export function CreateStreamForm({
       </div>
 
       <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginTop: "1rem" }}>
+        {simulationError && (
+          <span className="field-error" role="alert">
+            {simulationError}
+          </span>
+        )}
         <button
           className="btn-primary"
           type="submit"
           disabled={isSubmitting || (submitAttempted && !formValid)}
           aria-busy={isSubmitting}
         >
-          {isSubmitting ? "Creating…" : "Create Stream"}
+          {isSubmitting ? "Estimating fee..." : "Create Stream"}
         </button>
       </div>
     </form>
+    {feePreview && (
+      <div className="modal-backdrop" role="presentation">
+        <div
+          className="modal-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="fee-preview-title"
+        >
+          <div className="modal-header">
+            <h3 id="fee-preview-title" className="modal-title">
+              Confirm stream creation
+            </h3>
+            <button
+              type="button"
+              className="modal-close"
+              aria-label="Cancel fee preview"
+              onClick={() => setFeePreview(null)}
+              disabled={isSubmitting}
+            >
+              x
+            </button>
+          </div>
+
+          <dl className="fee-preview-list">
+            <div>
+              <dt>Total amount</dt>
+              <dd>
+                {feePreview.payload.totalAmount} {feePreview.payload.assetCode}
+              </dd>
+            </div>
+            <div>
+              <dt>Stream rate</dt>
+              <dd>{formatStreamRate(feePreview.payload)}</dd>
+            </div>
+            <div>
+              <dt>Network fee estimate</dt>
+              <dd>{feePreview.estimate.feeXlm} XLM</dd>
+            </div>
+          </dl>
+
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => setFeePreview(null)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => void confirmCreateStream()}
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+            >
+              {isSubmitting ? "Creating..." : "Confirm"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

@@ -169,6 +169,30 @@ export async function createStream(
   return body.data;
 }
 
+export interface StreamFeeEstimate {
+  feeStroops: number;
+  feeXlm: string;
+}
+
+export async function estimateCreateStreamFee(
+  payload: CreateStreamPayload,
+): Promise<StreamFeeEstimate> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE}/streams/fee-estimate`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const body = await parseResponse<{ data: StreamFeeEstimate }>(response);
+  return body.data;
+}
+
 export async function cancelStream(streamId: string): Promise<Stream> {
   const headers: Record<string, string> = {};
   if (authToken) {

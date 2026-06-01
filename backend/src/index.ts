@@ -50,6 +50,7 @@ import {
   listStreamsByRecipient,
   listStreamsBySender,
   pauseStream,
+  estimateCreateStreamFee,
   refreshStreamStatuses,
   resumeStream,
   StreamStatus,
@@ -739,6 +740,41 @@ app.post("/api/auth/token", async (req: Request, res: Response) => {
 
 // POST /api/auth/refresh — accepts a valid Bearer JWT, returns a new one with fresh 24h expiry
 app.post("/api/auth/refresh", refreshToken);
+
+app.post(
+  "/api/streams/fee-estimate",
+  mutationLimiter,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    const parsedBody = createStreamPayloadWithAllowedAssetsSchema(
+      ALLOWED_ASSETS,
+    ).safeParse(req.body);
+    if (!parsedBody.success) {
+      sendValidationError(req, res, parsedBody.error.issues);
+      return;
+    }
+
+    try {
+      const estimate = await estimateCreateStreamFee(parsedBody.data);
+      res.json({ data: estimate });
+    } catch (error: any) {
+      console.error("Failed to estimate stream creation fee:", error);
+      const normalizedError = normalizeUnknownApiError(
+        error,
+        "Failed to estimate network fee.",
+      );
+      sendApiError(
+        req,
+        res,
+        normalizedError.statusCode,
+        normalizedError.message,
+        {
+          code: normalizedError.code ?? "INTERNAL_ERROR",
+        },
+      );
+    }
+  },
+);
 
 app.post(
   "/api/streams",
