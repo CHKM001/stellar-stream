@@ -44,7 +44,8 @@ export const swaggerDocument = {
             type: "number",
             description: "Total amount to stream.",
             example: 1000,
-            exclusiveMinimum: 0,
+            minimum: 0,
+            exclusiveMinimum: true,
           },
           durationSeconds: {
             type: "number",

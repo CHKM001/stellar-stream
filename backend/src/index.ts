@@ -286,6 +286,10 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
+app.get("/api/docs/openapi.json", (_req: Request, res: Response) => {
+  res.json(swaggerDocument);
+});
+
 function parseStreamId(
   streamIdRaw: unknown,
 ): { ok: true; value: string } | { ok: false; issues: z.ZodIssue[] } {

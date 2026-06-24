@@ -185,6 +185,11 @@ Status rules:
 
 ## 4) API Reference
 
+Interactive API documentation is available via Swagger UI at:
+
+- Swagger UI: [`/api/docs`](http://localhost:3001/api/docs)
+- Raw OpenAPI spec: [`/api/docs/openapi.json`](http://localhost:3001/api/docs/openapi.json)
+
 Base URL:
 
 - Local: `http://localhost:3001`
