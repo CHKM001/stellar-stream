@@ -72,6 +72,7 @@ const envSchema = z.object({
   SOROBAN_DISABLED: z.string().optional(),
   INDEXER_POLL_INTERVAL_MS: indexerPollIntervalSchema.optional().default(10000),
   RECONCILIATION_INTERVAL_MS: reconciliationIntervalSchema.optional().default(60000),
+  ALLOWED_ORIGINS: z.string().optional(),
 });
 
 export interface ValidatedConfig {
@@ -91,6 +92,7 @@ export interface ValidatedConfig {
   indexerPollIntervalMs: number;
   reconciliationIntervalMs: number;
   adminApiKey: string | null;
+  allowedOrigins: string | undefined;
 }
 
 export function validateEnv(): ValidatedConfig {
@@ -258,5 +260,6 @@ export function validateEnv(): ValidatedConfig {
     indexerPollIntervalMs: env.INDEXER_POLL_INTERVAL_MS,
     reconciliationIntervalMs: env.RECONCILIATION_INTERVAL_MS,
     adminApiKey,
+    allowedOrigins: env.ALLOWED_ORIGINS,
   };
 }

@@ -1,7 +1,7 @@
 import pino from "pino";
 
 const STELLAR_SECRET_REGEX = /^S[0-9A-Z]{55}$/;
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test";
 
 function redactValue(value: unknown): unknown {
   if (typeof value === "string" && STELLAR_SECRET_REGEX.test(value)) {

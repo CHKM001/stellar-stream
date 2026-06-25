@@ -227,7 +227,38 @@ const claimableLimiter = rateLimit({
   },
 });
 
-app.use(cors());
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS;
+
+if (ALLOWED_ORIGINS) {
+  const allowedOrigins = ALLOWED_ORIGINS.split(",").map((o) => o.trim());
+
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+
+    if (req.method === "OPTIONS" && req.headers["access-control-request-method"]) {
+      if (!origin || !allowedOrigins.includes(origin)) {
+        res.status(403).end();
+        return;
+      }
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE");
+      res.setHeader("Access-Control-Allow-Headers", req.headers["access-control-request-headers"] || "");
+      res.setHeader("Content-Length", "0");
+      res.status(204).end();
+      return;
+    }
+
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+    }
+
+    next();
+  });
+} else {
+  app.use(cors());
+}
 app.use(requestLogger);
 app.use(
   express.json({
@@ -1336,15 +1367,10 @@ app.patch(
     }
 
     try {
-      const updated = await updateStreamStartAt(parsedId.value, parsedBody.data.startAt);
-      res.json({
-        data: {
-          ...updated,
-          progress: calculateProgress(updated),
-        },
-      });
+      const updated = updateStreamStartAt(parsedId.value, parsedBody.data.startAt);
+      res.json({ data: updated });
+      return;
     } catch (error: any) {
-      logger.error({ err: error, streamId: parsedId.value }, "failed to update stream start time");
       const normalizedError = normalizeUnknownApiError(
         error,
         "Failed to update stream start time.",
@@ -1354,10 +1380,9 @@ app.patch(
         res,
         normalizedError.statusCode,
         normalizedError.message,
-        {
-          code: normalizedError.code ?? "INTERNAL_ERROR",
-        },
+        { code: normalizedError.code ?? "UPDATE_FAILED" },
       );
+      return;
     }
   },
 );
