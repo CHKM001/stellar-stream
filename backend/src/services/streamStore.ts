@@ -50,6 +50,7 @@ export interface StreamRecord {
   refundedAmount?: number;
   pausedAt?: number;
   pausedDuration: number;
+  metadata?: Record<string, string> | null;
 }
 
 export interface StreamProgress {
@@ -76,9 +77,18 @@ interface StreamRow {
   archived_at: number | null;
   paused_at: number | null;
   paused_duration: number;
+  metadata: string | null;
 }
 
 function rowToRecord(row: StreamRow): StreamRecord {
+  let metadata: Record<string, string> | null = null;
+  if (row.metadata) {
+    try {
+      metadata = JSON.parse(row.metadata);
+    } catch {
+      metadata = null;
+    }
+  }
   return {
     id: row.id,
     sender: row.sender,
@@ -93,6 +103,7 @@ function rowToRecord(row: StreamRow): StreamRecord {
     refundedAmount: row.refunded_amount ?? undefined,
     pausedAt: row.paused_at ?? undefined,
     pausedDuration: row.paused_duration ?? 0,
+    metadata,
   };
 }
 
@@ -100,8 +111,8 @@ function upsertStream(record: StreamRecord): void {
   const db = getDb();
   db.prepare(
     `
-    INSERT INTO streams (id, sender, recipient, asset_code, total_amount, duration_seconds, start_at, created_at, canceled_at, completed_at, refunded_amount, archived_at, paused_at, paused_duration)
-    VALUES (@id, @sender, @recipient, @assetCode, @totalAmount, @durationSeconds, @startAt, @createdAt, @canceledAt, @completedAt, @refundedAmount, @archivedAt, @pausedAt, @pausedDuration)
+    INSERT INTO streams (id, sender, recipient, asset_code, total_amount, duration_seconds, start_at, created_at, canceled_at, completed_at, refunded_amount, archived_at, paused_at, paused_duration, metadata)
+    VALUES (@id, @sender, @recipient, @assetCode, @totalAmount, @durationSeconds, @startAt, @createdAt, @canceledAt, @completedAt, @refundedAmount, @archivedAt, @pausedAt, @pausedDuration, @metadata)
     ON CONFLICT(id) DO UPDATE SET
       sender = excluded.sender,
       recipient = excluded.recipient,
@@ -115,7 +126,8 @@ function upsertStream(record: StreamRecord): void {
       refunded_amount = excluded.refunded_amount,
       archived_at = excluded.archived_at,
       paused_at = excluded.paused_at,
-      paused_duration = excluded.paused_duration
+      paused_duration = excluded.paused_duration,
+      metadata = excluded.metadata
   `,
   ).run({
     id: record.id,
@@ -132,6 +144,7 @@ function upsertStream(record: StreamRecord): void {
     archivedAt: null,
     pausedAt: record.pausedAt ?? null,
     pausedDuration: record.pausedDuration ?? 0,
+    metadata: record.metadata ? JSON.stringify(record.metadata) : null,
   });
 }
 
@@ -344,7 +357,27 @@ async function fetchOnChainStreamRecord(
 
   const streamData = scValToNative(simRes.result.retval);
 
-  const result = {
+  let metadata: Record<string, string> | null = null;
+  if (streamData.metadata) {
+    try {
+      const rawMeta = streamData.metadata;
+      if (rawMeta instanceof Map) {
+        metadata = {};
+        for (const [k, v] of rawMeta.entries()) {
+          metadata[String(k)] = String(v);
+        }
+      } else if (typeof rawMeta === "object") {
+        metadata = {};
+        for (const [k, v] of Object.entries(rawMeta as Record<string, unknown>)) {
+          metadata[String(k)] = String(v);
+        }
+      }
+    } catch {
+      metadata = null;
+    }
+  }
+
+  const result: StreamRecord = {
     id: id.toString(),
     sender: streamData.sender,
     recipient: streamData.recipient,
@@ -356,6 +389,7 @@ async function fetchOnChainStreamRecord(
     canceledAt: streamData.canceled ? nowInSeconds() : undefined,
     pausedAt: streamData.paused_at ? Number(streamData.paused_at) : undefined,
     pausedDuration: Number(streamData.paused_duration ?? 0),
+    metadata,
   };
 
   await setCached(cacheKey, result, 5);

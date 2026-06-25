@@ -2274,3 +2274,61 @@ fn test_get_split_children_on_parent_stream_returns_child_ids_and_child_to_paren
     assert_eq!(parent_of_a, parent_id);
     assert_eq!(parent_of_b, parent_id);
 }
+
+// =============================================================================
+// #334 — Full cancel-after-partial-claim lifecycle integration test
+// =============================================================================
+
+#[test]
+fn test_cancel_after_partial_claim_full_lifecycle() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, StellarStreamContract);
+    let client = StellarStreamContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let token = create_token(&env, &admin);
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(&sender, &100);
+    let token_client = token::Client::new(&env, &token);
+
+    // Step 1: Create stream with 100 XLM over 100 seconds
+    let stream_id = client.create_stream(
+        &sender, &recipient, &token, &100, &0, &100, &0, &None,
+    );
+
+    // Verify sender balance is 0 (all escrowed)
+    assert_eq!(token_client.balance(&sender), 0);
+
+    // Step 2: Advance time to 50s, recipient claims 50 XLM
+    env.ledger().with_mut(|l| l.timestamp = 50);
+    assert_eq!(client.claimable(&stream_id, &50), 50);
+    let claimed = client.claim(&stream_id, &recipient, &50);
+    assert_eq!(claimed, 50);
+    assert_eq!(token_client.balance(&recipient), 50);
+
+    // Step 3: Cancel stream at 50s
+    client.cancel(&stream_id, &sender);
+
+    // Step 4: Sender receives 50 XLM refund (100 total - 50 vested)
+    let sender_refund = token_client.balance(&sender);
+    assert_eq!(sender_refund, 50);
+
+    // Step 5: Verify stream state after cancel
+    let stream = client.get_stream(&stream_id);
+    assert!(stream.canceled);
+    assert_eq!(stream.total_amount, 50);
+    assert_eq!(stream.claimed_amount, 50);
+    assert_eq!(stream.end_time, 50);
+
+    // Step 6: Recipient cannot claim more than already claimed
+    assert_eq!(client.claimable(&stream_id, &50), 0);
+    assert_eq!(client.claimable(&stream_id, &100), 0);
+    assert_eq!(client.claimable(&stream_id, &9999), 0);
+
+    // Step 7: Token conservation: sender_refund + claimed == total original amount
+    let recipient_balance = token_client.balance(&recipient);
+    assert_eq!(sender_refund + recipient_balance, 100);
+}

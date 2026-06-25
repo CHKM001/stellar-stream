@@ -321,6 +321,12 @@ export function StreamDetailDrawer({
                     <dt>Start</dt>
                     <dd>{formatTs(stream.startAt)}</dd>
                   </div>
+                  {stream.cliffSeconds != null && stream.cliffSeconds > 0 && (
+                    <div className="drawer-dl__row">
+                      <dt>Cliff Period</dt>
+                      <dd>{(stream.cliffSeconds / 86400).toFixed(1)} days ({stream.cliffSeconds}s)</dd>
+                    </div>
+                  )}
                   {stream.canceledAt && (
                     <div className="drawer-dl__row">
                       <dt>Canceled</dt>
@@ -329,6 +335,29 @@ export function StreamDetailDrawer({
                   )}
                 </dl>
               </section>
+
+              {/* On-chain metadata */}
+              {stream.metadata && Object.keys(stream.metadata).length > 0 && (
+                <section className="drawer-section" aria-labelledby="drawer-onchain-meta-heading">
+                  <h3 id="drawer-onchain-meta-heading" className="drawer-section-title">On-chain Metadata</h3>
+                  <table className="drawer-metadata-table" aria-label="Stream metadata">
+                    <thead>
+                      <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(stream.metadata).map(([key, value]) => (
+                        <tr key={key}>
+                          <td><code className="drawer-code">{key}</code></td>
+                          <td>{value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              )}
 
               {/* Progress section */}
               <section className="drawer-section" aria-labelledby="drawer-progress-heading">
