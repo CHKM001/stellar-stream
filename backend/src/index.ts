@@ -32,6 +32,7 @@ import { deleteStreamById } from "./services/streamStore";
 import { getStreamStats } from "./services/stats";
 
 import { startReconciliationJob } from "./services/reconciliationJob";
+import { startArchiveJob } from "./services/archiveJob";
 import { startWebhookWorker } from "./services/webhookWorker";
 import {
   getDeadLetters,
@@ -1709,6 +1710,7 @@ async function startServer() {
     logger.warn("CONTRACT_ID not set, event indexer will not start");
   }
 
+  startArchiveJob(config.archiveCronIntervalMs);
   app.listen(config.port, () => {
     logger.info({ port: config.port }, "StellarStream API listening");
   });
