@@ -305,6 +305,17 @@ export const swaggerDocument = {
             description: "Number of distinct recipient accounts.",
             example: 31,
           },
+          localStreamCount: {
+            type: "integer",
+            description: "Total streams known to the local database.",
+            example: 42,
+          },
+          onChainStreamCount: {
+            type: "integer",
+            nullable: true,
+            description: "Canonical stream count read from the on-chain NextStreamId. Null when the Soroban RPC is unavailable.",
+            example: 42,
+          },
         },
       },
       Error: {

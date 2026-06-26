@@ -1,4 +1,5 @@
-import { reconcileMissingStreams } from "./streamStore";
+import { reconcileMissingStreams, getOnChainStreamCount } from "./streamStore";
+import { getDb } from "./db";
 import { logger } from "../logger";
 
 let reconciliationInterval: NodeJS.Timeout | null = null;
@@ -13,8 +14,25 @@ async function runReconciliationCycle(): Promise<void> {
   reconciliationInFlight = true;
   try {
     await reconcileMissingStreams();
+    await checkStreamCountDiscrepancy();
   } finally {
     reconciliationInFlight = false;
+  }
+}
+
+async function checkStreamCountDiscrepancy(): Promise<void> {
+  const onChainCount = await getOnChainStreamCount();
+  if (onChainCount === null) return;
+
+  const db = getDb();
+  const row = db.prepare("SELECT COUNT(*) AS total FROM streams").get() as { total: number };
+  const localCount = row.total;
+
+  if (onChainCount !== localCount) {
+    logger.warn(
+      { onChainStreamCount: onChainCount, localStreamCount: localCount },
+      "stream count discrepancy detected between on-chain and local database",
+    );
   }
 }
 

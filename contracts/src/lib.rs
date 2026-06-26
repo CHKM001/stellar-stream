@@ -371,6 +371,14 @@ impl StellarStreamContract {
             .unwrap_or(0)
     }
 
+    /// Returns the total number of streams ever created (canonical on-chain count).
+    pub fn get_stream_count(env: Env) -> u64 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::NextStreamId)
+            .unwrap_or(0)
+    }
+
     pub fn claimable(env: Env, stream_id: u64, at_time: u64) -> i128 {
         let stream = read_stream(&env, stream_id);
         let vested = vested_amount(&stream, at_time);

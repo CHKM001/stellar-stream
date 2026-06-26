@@ -588,6 +588,29 @@ export async function getLatestLedgerTime(): Promise<number> {
   }
 }
 
+export async function getOnChainStreamCount(): Promise<number | null> {
+  const sorobanContext = getSorobanContext();
+  if (!sorobanContext || !rpcServer) {
+    return null;
+  }
+  try {
+    const sourceAccount = await sorobanContext.sourceAccountPromise;
+    const simRes = await simulateContractCall(
+      sorobanContext.contract,
+      sourceAccount,
+      "get_stream_count",
+    );
+    if (!rpc.Api.isSimulationSuccess(simRes) || !simRes.result) {
+      logger.warn({ simulation: simRes }, "failed to simulate get_stream_count");
+      return null;
+    }
+    return Number(scValToNative(simRes.result.retval));
+  } catch (err) {
+    logger.warn({ err }, "get_stream_count RPC call failed");
+    return null;
+  }
+}
+
 export async function syncStreams() {
   const sorobanContext = getSorobanContext();
   if (!sorobanContext) return;

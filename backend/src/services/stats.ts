@@ -22,6 +22,8 @@ export interface GlobalStats {
   totalAmount: number;
   uniqueSenders: number;
   uniqueRecipients: number;
+  localStreamCount: number;
+  onChainStreamCount: number | null;
 }
 
 const CACHE_TTL_MS = 30_000;
@@ -165,10 +167,12 @@ export function getGlobalStats(): GlobalStats {
     totalAmount: Math.round(row.totalAmount * 100) / 100,
     uniqueSenders: row.uniqueSenders,
     uniqueRecipients: row.uniqueRecipients,
+    localStreamCount: row.total,
+    onChainStreamCount: null,
   };
   cacheExpiresAt = now + CACHE_TTL_MS;
 
-  return cachedGlobalStats;
+  return cachedGlobalStats as GlobalStats;
 }
 
 /** Exposed for testing — resets the in-memory cache. */

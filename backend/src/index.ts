@@ -66,6 +66,7 @@ import {
   StreamStatus,
   syncStreams,
   updateStreamStartAt,
+  getOnChainStreamCount,
 } from "./services/streamStore";
 
 import {
@@ -353,11 +354,12 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-app.get("/api/stats", (_req: Request, res: Response) => {
+app.get("/api/stats", async (_req: Request, res: Response) => {
   try {
     const stats = getGlobalStats();
+    const onChainStreamCount = await getOnChainStreamCount();
     res.set("Cache-Control", "max-age=30");
-    res.json({ data: stats });
+    res.json({ data: { ...stats, onChainStreamCount, localStreamCount: stats.total } });
   } catch (error) {
     logger.error({ err: error }, "Failed to get stats");
     sendApiError(_req, res, 500, "Failed to compute stats.", { code: "INTERNAL_ERROR" });
