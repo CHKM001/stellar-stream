@@ -19,6 +19,9 @@ import { triggerWebhook } from "./webhook";
 import { initCache, getCache } from "./cache";
 import { resetStatsCache } from "./stats";
 import { logger } from "../logger";
+import { retryWithBackoff, SorobanSubmitError } from "../utils/sorobanRetry";
+
+export { SorobanSubmitError };
 
 export type StreamStatus = "scheduled" | "active" | "paused" | "completed" | "canceled";
 
@@ -209,34 +212,6 @@ async function invalidateCache(pattern?: string): Promise<void> {
   }
 }
 
-async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxAttempts = 3,
-): Promise<T> {
-  let lastError: any;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastError = err;
-      const message = String(err).toLowerCase();
-      const isRetryable =
-        message.includes("timeout") ||
-        message.includes("network") ||
-        message.includes("econnrefused") ||
-        message.includes("econnreset");
-
-      if (!isRetryable || attempt === maxAttempts) {
-        throw err;
-      }
-
-      const delayMs = Math.pow(2, attempt - 1) * 1000;
-      logger.info({ err, attempt, delayMs }, "retryable operation failed, retrying");
-      await new Promise((r) => setTimeout(r, delayMs));
-    }
-  }
-  throw lastError;
-}
 
 function getSorobanContext():
   | {
