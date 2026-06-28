@@ -108,6 +108,67 @@ export const swaggerDocument = {
           },
         },
       },
+      StreamWithProgress: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Unique identifier for the stream.",
+            example: "uuid-v4-string",
+          },
+          sender: {
+            type: "string",
+            example: "GC7Y4M77LNYKYF4K4V5A737W3G3L3T7XQWZJZL4R64Z43W3T7XZQK2L4",
+          },
+          recipient: {
+            type: "string",
+            example: "GB4Z3ZK3X24Z3T7XZQK2L4R64Z43W3T7XZQK2L4R64Z43W3T7XZQK2L4",
+          },
+          assetCode: {
+            type: "string",
+            example: "USDC",
+          },
+          totalAmount: {
+            type: "number",
+            example: 1000,
+          },
+          durationSeconds: {
+            type: "number",
+            example: 3600,
+          },
+          startAt: {
+            type: "number",
+            example: 1716382000,
+          },
+          createdAt: {
+            type: "number",
+            example: 1716378400,
+          },
+          canceledAt: {
+            type: "number",
+            example: 1716385600,
+          },
+          completedAt: {
+            type: "number",
+            example: 1716389200,
+          },
+          refundedAmount: {
+            type: "number",
+            example: 500,
+          },
+          pausedAt: {
+            type: "number",
+            example: 1716384000,
+          },
+          pausedDuration: {
+            type: "number",
+            example: 300,
+          },
+          progress: {
+            $ref: "#/components/schemas/StreamProgress",
+          },
+        },
+      },
       StreamProgress: {
         type: "object",
         properties: {
@@ -1287,6 +1348,74 @@ export const swaggerDocument = {
           },
           "500": {
             description: "Failed to cancel stream.",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Error",
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    "/api/streams/{id}/reconcile": {
+      post: {
+        summary: "Reconcile stream with on-chain state",
+        description:
+          "Forces an immediate Soroban get_stream call to sync the local SQLite record with the on-chain state. " +
+          "Useful when a transaction (claim, cancel) has been submitted but the indexer hasn't polled yet. " +
+          "Rate limited to 5 calls per stream per minute.",
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            description: "The unique ID of the stream to reconcile.",
+            schema: {
+              type: "string",
+            },
+          },
+        ],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": {
+            description: "Stream reconciled successfully.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      $ref: "#/components/schemas/StreamWithProgress",
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": {
+            description: "Stream not found on-chain.",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Error",
+                },
+              },
+            },
+          },
+          "429": {
+            description: "Rate limit exceeded (5 calls per stream per minute).",
+            content: {
+              "application/json": {
+                schema: {
+                  $ref: "#/components/schemas/Error",
+                },
+              },
+            },
+          },
+          "500": {
+            description: "Failed to reconcile stream.",
             content: {
               "application/json": {
                 schema: {

@@ -1241,6 +1241,126 @@ describe("Backend Integration Tests", () => {
         expect(claimEvents).toHaveLength(1);
       });
     });
+
+    describe("POST /api/streams/:id/reconcile", () => {
+      let senderKeypair: ReturnType<typeof Keypair.random>;
+      let reconcileStreamId: string;
+      let senderToken: string;
+      let testCounter = 0;
+
+      beforeEach(() => {
+        senderKeypair = Keypair.random();
+        const now = Math.floor(Date.now() / 1000);
+        reconcileStreamId = `200-${testCounter++}`;
+
+        const db = getDb();
+        db.prepare(`
+          INSERT INTO streams (id, sender, recipient, asset_code, total_amount, duration_seconds, start_at, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          reconcileStreamId,
+          senderKeypair.publicKey(),
+          Keypair.random().publicKey(),
+          "USDC",
+          1000,
+          3600,
+          now - 1800,
+          now - 1800,
+        );
+
+        senderToken = jwt.sign(
+          { accountId: senderKeypair.publicKey() },
+          getJwtSecret(),
+          { expiresIn: "1h" },
+        );
+      });
+
+      it("should reconcile stream with on-chain state and update SQLite", async () => {
+        // Mock the Soroban get_stream response with updated on-chain state
+        mockSimulateTransaction.mockResolvedValue({
+          kind: "success",
+          result: {
+            retval: {
+              sender: senderKeypair.publicKey(),
+              recipient: Keypair.random().publicKey(),
+              token: "USDC",
+              total_amount: 1000,
+              start_time: Math.floor(Date.now() / 1000) - 1800,
+              end_time: Math.floor(Date.now() / 1000) + 1800,
+              canceled: true,
+              paused: false,
+              paused_at: null,
+              paused_duration: 0,
+              claimed_amount: 500,
+            },
+          },
+        });
+
+        const response = await request(app)
+          .post(`/api/streams/${reconcileStreamId}/reconcile`)
+          .set("Authorization", `Bearer ${senderToken}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body.data.id).toBe(reconcileStreamId);
+        expect(response.body.data.canceledAt).toBeDefined();
+
+        // Verify SQLite was updated
+        const db = getDb();
+        const updatedStream = db
+          .prepare(`SELECT * FROM streams WHERE id = ?`)
+          .get(reconcileStreamId) as any;
+        expect(updatedStream.canceled_at).not.toBeNull();
+      });
+
+      it("should return 404 when stream not found on-chain", async () => {
+        mockSimulateTransaction.mockResolvedValue({
+          kind: "error",
+        });
+
+        const response = await request(app)
+          .post(`/api/streams/${reconcileStreamId}/reconcile`)
+          .set("Authorization", `Bearer ${senderToken}`);
+
+        expect(response.status).toBe(500);
+        expect(response.body.code).toBe("INTERNAL_ERROR");
+      });
+
+      it("should enforce rate limit (5 calls per stream per minute)", async () => {
+        mockSimulateTransaction.mockResolvedValue({
+          kind: "success",
+          result: {
+            retval: {
+              sender: senderKeypair.publicKey(),
+              recipient: Keypair.random().publicKey(),
+              token: "USDC",
+              total_amount: 1000,
+              start_time: Math.floor(Date.now() / 1000) - 1800,
+              end_time: Math.floor(Date.now() / 1000) + 1800,
+              canceled: false,
+              paused: false,
+              paused_at: null,
+              paused_duration: 0,
+              claimed_amount: 0,
+            },
+          },
+        });
+
+        // Make 5 successful requests
+        for (let i = 0; i < 5; i++) {
+          const response = await request(app)
+            .post(`/api/streams/${reconcileStreamId}/reconcile`)
+            .set("Authorization", `Bearer ${senderToken}`);
+          expect(response.status).toBe(200);
+        }
+
+        // 6th request should be rate limited
+        const response = await request(app)
+          .post(`/api/streams/${reconcileStreamId}/reconcile`)
+          .set("Authorization", `Bearer ${senderToken}`);
+        expect(response.status).toBe(429);
+        expect(response.body.code).toBe("RATE_LIMIT_EXCEEDED");
+      });
+    });
   });
 
   describe("Stream History", () => {

@@ -323,11 +323,14 @@ async function fetchOnChainStreamRecord(
   contract: Contract,
   sourceAccount: Account,
   id: number,
+  bypassCache = false,
 ): Promise<StreamRecord | null> {
   const cacheKey = `stream:${id}`;
-  const cached = await getCached<StreamRecord>(cacheKey);
-  if (cached) {
-    return cached;
+  if (!bypassCache) {
+    const cached = await getCached<StreamRecord>(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
   const simRes = await simulateContractCall(
@@ -465,8 +468,8 @@ export async function getOnChainClaimableAmount(
   }
 
   const sourceAccount = await sorobanContext.sourceAccountPromise;
-  const latestLedger = await rpcServer.getLatestLedger();
-  const at = latestLedger.closeTime ? parseInt(latestLedger.closeTime, 10) : Math.floor(Date.now() / 1000);
+  const latestLedger = await rpcServer.getLatestLedger() as any;
+  const at = latestLedger.timestamp ? parseInt(latestLedger.timestamp, 10) : Math.floor(Date.now() / 1000);
 
   const simRes = await simulateContractCall(
     sorobanContext.contract,
@@ -546,9 +549,9 @@ export async function getOnChainClaimableBatch(
   }
 
   const sourceAccount = await sorobanContext.sourceAccountPromise;
-  const latestLedger = await rpcServer.getLatestLedger();
-  const at = latestLedger.closeTime
-    ? parseInt(latestLedger.closeTime, 10)
+  const latestLedger = await rpcServer.getLatestLedger() as any;
+  const at = latestLedger.timestamp
+    ? parseInt(latestLedger.timestamp, 10)
     : Math.floor(Date.now() / 1000);
 
   // Split into chunks of MAX_CLAIMABLE_BATCH_SIZE
@@ -581,8 +584,8 @@ export async function getLatestLedgerTime(): Promise<number> {
     return Math.floor(Date.now() / 1000);
   }
   try {
-    const latestLedger = await rpcServer.getLatestLedger();
-    return latestLedger.closeTime ? parseInt(latestLedger.closeTime, 10) : Math.floor(Date.now() / 1000);
+    const latestLedger = await rpcServer.getLatestLedger() as any;
+    return latestLedger.timestamp ? parseInt(latestLedger.timestamp, 10) : Math.floor(Date.now() / 1000);
   } catch (e) {
     return Math.floor(Date.now() / 1000);
   }
@@ -669,6 +672,49 @@ export async function syncStreams() {
     logger.info({ elapsedMs: elapsed, streamCount: ids.length }, "stream sync completed");
   } catch (err) {
     logger.error({ err }, "failed to sync streams");
+  }
+}
+
+/**
+ * Reconciles a single stream's on-chain state with local SQLite.
+ * Forces an immediate Soroban get_stream call and updates the local record.
+ * @async
+ * @param {string} streamId - The stream ID to reconcile
+ * @returns {Promise<StreamRecord>} The updated stream record
+ * @throws {Error} If stream not found on-chain or Soroban not configured
+ */
+export async function reconcileStream(streamId: string): Promise<StreamRecord> {
+  const sorobanContext = getSorobanContext();
+  if (!sorobanContext) {
+    throw new Error("Soroban not configured");
+  }
+
+  const id = Number(streamId);
+  if (isNaN(id) || id <= 0) {
+    throw new Error("Invalid stream ID");
+  }
+
+  try {
+    const sourceAccount = await sorobanContext.sourceAccountPromise;
+    const onChainStream = await fetchOnChainStreamRecord(
+      sorobanContext.contract,
+      sourceAccount,
+      id,
+      true, // bypass cache to force fresh Soroban call
+    );
+
+    if (!onChainStream) {
+      throw new Error("Stream not found on-chain");
+    }
+
+    // Update local SQLite with on-chain state
+    upsertStream(onChainStream);
+
+    logger.info({ streamId }, "stream reconciled with on-chain state");
+    return onChainStream;
+  } catch (err) {
+    logger.error({ err, streamId }, "failed to reconcile stream");
+    throw err;
   }
 }
 

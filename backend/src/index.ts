@@ -31,7 +31,8 @@ import {
   getCircuitBreakerStatus,
 } from "./services/indexer";
 import { adminAuth } from "./middleware/adminAuth";
-import { deleteStreamById } from "./services/streamStore";
+import { deleteStreamById, reconcileStream } from "./services/streamStore";
+import { getCache } from "./services/cache";
 import { getStreamStats } from "./services/stats";
 
 import { startReconciliationJob } from "./services/reconciliationJob";
@@ -242,6 +243,28 @@ const claimableLimiter = rateLimit({
       : 60;
     res.set("Retry-After", String(Math.max(1, retryAfter)));
     sendApiError(req, res, 429, "Too many requests. Please try again later.", {
+      code: "RATE_LIMIT_EXCEEDED",
+    });
+  },
+});
+
+// Per-stream rate limiter for reconcile endpoint: 5 calls per stream per minute
+const reconcileLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => {
+    // Use stream ID from params as the rate limit key
+    return `reconcile:${req.params.id}`;
+  },
+  handler: (req: Request, res: Response) => {
+    const resetTime = (req as any).rateLimit?.resetTime;
+    const retryAfter = resetTime
+      ? Math.ceil((resetTime.getTime() - Date.now()) / 1000)
+      : 60;
+    res.set("Retry-After", String(Math.max(1, retryAfter)));
+    sendApiError(req, res, 429, "Too many reconcile requests for this stream. Please try again later.", {
       code: "RATE_LIMIT_EXCEEDED",
     });
   },
@@ -1196,6 +1219,10 @@ app.post(
 
     try {
       const updated = await cancelStream(parsedId.value);
+      if (!updated) {
+        sendApiError(req, res, 500, "Failed to cancel stream.", { code: "INTERNAL_ERROR" });
+        return;
+      }
       res.json({
         data: {
           ...updated,
@@ -1354,6 +1381,49 @@ app.post(
       const normalizedError = normalizeUnknownApiError(
         error,
         "Failed to resume stream.",
+      );
+      sendApiError(
+        req,
+        res,
+        normalizedError.statusCode,
+        normalizedError.message,
+        {
+          code: normalizedError.code ?? "INTERNAL_ERROR",
+        },
+      );
+    }
+  },
+);
+
+// POST /api/streams/:id/reconcile — sync on-chain state to local SQLite
+app.post(
+  "/api/streams/:id/reconcile",
+  authMiddleware,
+  reconcileLimiter,
+  async (req: Request, res: Response) => {
+    const parsedId = parseStreamId(req.params.id);
+    if (!parsedId.ok) {
+      sendValidationError(req, res, parsedId.issues);
+      return;
+    }
+
+    const stream = getStream(parsedId.value);
+    if (!stream) {
+      sendApiError(req, res, 404, "Stream not found.", { code: "NOT_FOUND" });
+      return;
+    }
+
+    try {
+      const updated = await reconcileStream(parsedId.value);
+      res.json({ data: { ...updated, progress: calculateProgress(updated) } });
+    } catch (error: any) {
+      if (error.message === "Stream not found on-chain") {
+        sendApiError(req, res, 404, "Stream not found on-chain.", { code: "NOT_FOUND" });
+        return;
+      }
+      const normalizedError = normalizeUnknownApiError(
+        error,
+        "Failed to reconcile stream.",
       );
       sendApiError(
         req,
@@ -1706,7 +1776,7 @@ app.post(
   "/api/webhooks/dead-letters/:id/requeue",
   authMiddleware,
   (req: Request, res: Response) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
     if (isNaN(id)) {
       sendApiError(req, res, 400, "Invalid ID format", {
         code: "VALIDATION_ERROR",
