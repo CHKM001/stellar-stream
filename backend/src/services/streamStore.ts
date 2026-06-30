@@ -96,7 +96,6 @@ interface StreamRow {
   metadata: string | null;
 }
 
-/** Converts a database row object into a typed StreamRecord, parsing metadata JSON. */
 function rowToRecord(row: StreamRow): StreamRecord {
   let metadata: Record<string, string> | null = null;
   if (row.metadata) {
@@ -125,7 +124,6 @@ function rowToRecord(row: StreamRow): StreamRecord {
   };
 }
 
-/** Inserts or updates a stream record in the database and synchronizes the FTS index. */
 function upsertStream(record: StreamRecord): void {
   const db = getDb();
   db.prepare(
@@ -170,7 +168,6 @@ function upsertStream(record: StreamRecord): void {
   syncFtsIndex(record.id, record.sender, record.recipient, record.assetCode);
 }
 
-/** Returns a Set of all stream IDs currently in the local database. */
 function listLocalStreamIds(): Set<string> {
   const db = getDb();
   const rows = db.prepare("SELECT id FROM streams").all() as Array<{ id: string }>;
@@ -203,12 +200,10 @@ export async function initSoroban() {
   }
 }
 
-/** Returns the current Unix timestamp in seconds. */
 export function nowInSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-/** Rounds a number to 6 decimal places for consistent numeric precision. */
 function round(value: number): number {
   return Number(value.toFixed(6));
 }
@@ -218,17 +213,14 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-/** Retrieves a value from the cache by key. */
 async function getCached<T>(key: string): Promise<T | null> {
   return getCache().get<T>(key);
 }
 
-/** Stores a value in the cache with an optional TTL in seconds. */
 async function setCached<T>(key: string, data: T, ttlSeconds = 5): Promise<void> {
   return getCache().set<T>(key, data, ttlSeconds);
 }
 
-/** Clears the entire cache or deletes entries matching a pattern. */
 async function invalidateCache(pattern?: string): Promise<void> {
   if (!pattern) {
     await getCache().clear();
@@ -238,7 +230,6 @@ async function invalidateCache(pattern?: string): Promise<void> {
 }
 
 
-/** Returns the Soroban contract and source account context, or undefined if Soroban is not configured. */
 function getSorobanContext():
   | {
     contract: Contract;
@@ -260,13 +251,6 @@ function getSorobanContext():
   };
 }
 
-/**
- * Simulates a Soroban contract call and returns the simulation result.
- * @param contract - The Soroban Contract instance
- * @param sourceAccount - The source account for the transaction
- * @param method - The contract method name to call
- * @param args - Optional arguments to pass to the contract method
- */
 async function simulateContractCall(
   contract: Contract,
   sourceAccount: Account,
@@ -290,12 +274,10 @@ async function simulateContractCall(
 
 const STROOPS_PER_XLM = 10_000_000;
 
-/** Converts a stroops amount (1 XLM = 10,000,000 stroops) to a decimal XLM string. */
 function formatStroopsAsXlm(stroops: number): string {
   return (stroops / STROOPS_PER_XLM).toFixed(7);
 }
 
-/** Builds a Soroban contract operation for creating a new stream. */
 function createStreamOperation(contractId: string, input: StreamInput, startAt: number) {
   const endAt = startAt + input.durationSeconds;
   const fakeToken = contractId;
@@ -311,7 +293,6 @@ function createStreamOperation(contractId: string, input: StreamInput, startAt: 
   );
 }
 
-/** Extracts the fee in stroops from a Soroban simulation response. */
 function readSimulationFeeStroops(simRes: rpc.Api.SimulateTransactionResponse): number {
   const rawFee =
     (simRes as any).minResourceFee ??
@@ -326,10 +307,6 @@ function readSimulationFeeStroops(simRes: rpc.Api.SimulateTransactionResponse): 
   return feeStroops;
 }
 
-/**
- * Fetches the next available on-chain stream ID from the Soroban contract.
- * @returns The next stream ID number, or null if the simulation fails
- */
 async function fetchNextOnChainStreamId(
   contract: Contract,
   sourceAccount: Account,
@@ -348,12 +325,6 @@ async function fetchNextOnChainStreamId(
   return Number(scValToNative(simRes.result.retval));
 }
 
-/**
- * Fetches a single stream record from the Soroban contract by ID.
- * Results are cached for 5 seconds unless bypassCache is true.
- * @param id - The stream ID to fetch
- * @param bypassCache - If true, skips the cache and fetches fresh data
- */
 async function fetchOnChainStreamRecord(
   contract: Contract,
   sourceAccount: Account,
@@ -421,7 +392,6 @@ async function fetchOnChainStreamRecord(
   return result;
 }
 
-/** Records a "created" event for a stream that was backfilled from on-chain data. */
 function recordBackfilledCreatedEvent(stream: StreamRecord): void {
   if (streamHasEvent(stream.id, "created")) {
     return;
@@ -500,11 +470,6 @@ export function calculateProgress(
   };
 }
 
-/**
- * Computes the real-time claimable amount for a stream from the Soroban contract.
- * @param id - The stream ID to query
- * @returns An object with the claimable amount and the ledger timestamp
- */
 export async function getOnChainClaimableAmount(
   id: string,
 ): Promise<{ claimableAmount: number; at: number }> {
@@ -535,9 +500,6 @@ export async function getOnChainClaimableAmount(
 
 const MAX_CLAIMABLE_BATCH_SIZE = 50;
 
-/**
- * Parses a native Soroban return value into a Record<string, number> mapping stream IDs to amounts.
- */
 function parseClaimableBatchMap(native: unknown): Record<string, number> {
   const result: Record<string, number> = {};
   if (native instanceof Map) {
@@ -554,13 +516,6 @@ function parseClaimableBatchMap(native: unknown): Record<string, number> {
   return result;
 }
 
-/**
- * Fetches claimable amounts for a chunk of stream IDs from the Soroban contract.
- * @param ids - Array of stream ID strings
- * @param at - Unix timestamp to query claimable amounts at
- * @param contract - The Soroban Contract instance
- * @param sourceAccount - The source account for the simulation
- */
 async function getOnChainClaimableBatchChunk(
   ids: string[],
   at: number,
@@ -591,11 +546,6 @@ async function getOnChainClaimableBatchChunk(
   return { amounts };
 }
 
-/**
- * Fetches claimable amounts for multiple streams in parallel chunks.
- * Splits large batches into chunks of 50 and limits concurrency to 5.
- * @param ids - Array of stream ID strings to query
- */
 export async function getOnChainClaimableBatch(
   ids: string[],
 ): Promise<{ amounts: Record<string, number>; at: number }> {
@@ -640,9 +590,6 @@ export async function getOnChainClaimableBatch(
   return { amounts: allAmounts, at };
 }
 
-/**
- * Returns the latest ledger timestamp from the Stellar network, or the current time as fallback.
- */
 export async function getLatestLedgerTime(): Promise<number> {
   if (!rpcServer) {
     return Math.floor(Date.now() / 1000);
@@ -655,10 +602,6 @@ export async function getLatestLedgerTime(): Promise<number> {
   }
 }
 
-/**
- * Returns the total number of streams on-chain by querying the Soroban contract.
- * @returns The on-chain stream count, or null if Soroban is not configured or the call fails
- */
 export async function getOnChainStreamCount(): Promise<number | null> {
   const sorobanContext = getSorobanContext();
   if (!sorobanContext || !rpcServer) {
@@ -682,10 +625,6 @@ export async function getOnChainStreamCount(): Promise<number | null> {
   }
 }
 
-/**
- * Synchronizes the local database with on-chain stream data from the Soroban contract.
- * Fetches all on-chain streams in parallel (up to 5 concurrent) and upserts them locally.
- */
 export async function syncStreams() {
   const sorobanContext = getSorobanContext();
   if (!sorobanContext) return;
@@ -961,11 +900,6 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
   return stream;
 }
 
-/**
- * Estimates the network fee for creating a stream by simulating the transaction.
- * @param input - The stream creation input parameters
- * @returns A StreamFeeEstimate with fee in both stroops and XLM
- */
 export async function estimateCreateStreamFee(input: StreamInput): Promise<StreamFeeEstimate> {
   const startAt = input.startAt ?? nowInSeconds();
   const contractId = process.env.CONTRACT_ID;
@@ -998,11 +932,6 @@ export async function estimateCreateStreamFee(input: StreamInput): Promise<Strea
 }
 
 
-/**
- * Refreshes stream statuses by marking streams whose duration has elapsed as completed.
- * Records completion events and triggers webhooks for newly completed streams.
- * @returns The number of streams that were marked as completed
- */
 export function refreshStreamStatuses(): number {
   const db = getDb();
   const now = nowInSeconds();
@@ -1275,12 +1204,6 @@ export async function cancelStream(
  * @returns {StreamRecord} The updated stream record
  * @throws {Error} If stream not found or not in scheduled state
  */
-/**
- * Pauses an active stream by recording the pause timestamp.
- * Only active streams can be paused.
- * @param id - The stream ID to pause
- * @returns The updated stream record
- */
 export async function pauseStream(id: string): Promise<StreamRecord> {
   const stream = getStream(id);
   if (!stream) {
@@ -1313,12 +1236,6 @@ export async function pauseStream(id: string): Promise<StreamRecord> {
   return stream;
 }
 
-/**
- * Resumes a paused stream by calculating the paused duration and extending the stream's
- * total duration to compensate. Only paused streams can be resumed.
- * @param id - The stream ID to resume
- * @returns The updated stream record
- */
 export async function resumeStream(id: string): Promise<StreamRecord> {
   const stream = getStream(id);
   if (!stream) {
@@ -1358,13 +1275,6 @@ export async function resumeStream(id: string): Promise<StreamRecord> {
   return stream;
 }
 
-/**
- * Updates the start time of a scheduled stream. Only streams that have not yet started
- * can have their start time changed.
- * @param id - The stream ID to update
- * @param newStartAt - The new start time as a Unix timestamp in seconds
- * @returns The updated stream record
- */
 export async function updateStreamStartAt(id: string,
   newStartAt: number,
 ): Promise<StreamRecord> {

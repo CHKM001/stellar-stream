@@ -12,7 +12,6 @@ declare global {
   }
 }
 
-/** Extracts a single header value from the request, returning the first element if it's an array. */
 function extractHeaderValue(
   req: Request,
   headerName: string,
@@ -27,15 +26,10 @@ function extractHeaderValue(
   return undefined;
 }
 
-/** Validates that an ID string contains only alphanumeric characters and hyphens, up to 128 chars. */
 function isValidId(id: string): boolean {
   return /^[a-zA-Z0-9-]{1,128}$/.test(id);
 }
 
-/**
- * Express middleware that assigns a correlation ID to each request (from headers or generated),
- * runs the request lifecycle within a correlation context, and logs the completed request.
- */
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   // Accept X-Correlation-ID first, then X-Request-ID, then generate UUID
   let correlationId =

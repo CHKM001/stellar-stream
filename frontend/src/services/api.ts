@@ -12,11 +12,6 @@ const DEFAULT_STALE_AFTER_MS = 4000;
 
 const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
-/**
- * Constructs the WebSocket URL based on the configured API base URL.
- * Converts http(s) to ws(s) and appends the /api/ws path.
- * @returns The WebSocket URL string
- */
 export function getWebSocketUrl(): string {
   // Construct WebSocket URL from API base URL
   const apiUrl = import.meta.env.VITE_API_URL || window.location.origin + "/api";
@@ -26,18 +21,13 @@ export function getWebSocketUrl(): string {
 }
 
 let authToken: string | null = null;
-/** Sets the authentication token used for API requests. */
 export function setAuthToken(token: string | null) {
   authToken = token;
 }
-/** Returns the current authentication token, or null if not set. */
 export function getAuthToken(): string | null {
   return authToken;
 }
 
-/**
- * Custom error class for API errors, including HTTP status code and response details.
- */
 export class ApiError extends Error {
   statusCode: number;
   details?: unknown;
@@ -50,12 +40,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * Parses an API response, throwing an ApiError for non-OK responses.
- * Handles JSON parsing and extracts error messages from the response body.
- * @param response - The fetch Response object to parse
- * @returns The parsed response body as type T
- */
 async function parseResponse<T>(response: Response): Promise<T> {
   const rawBody = await response.text();
   let body: Record<string, unknown> = {};
@@ -81,14 +65,6 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return body as T;
 }
 
-/**
- * Fetches data with a stale-while-revalidate caching strategy.
- * Returns cached data immediately if fresh, refreshes in background if stale,
- * or fetches normally if no cache exists.
- * @param key - The cache key
- * @param fetcher - The async function to fetch fresh data
- * @param staleAfterMs - How long cached data is considered fresh (default 4000ms)
- */
 async function fetchWithCache<T>(
   key: string,
   fetcher: () => Promise<T>,
@@ -153,11 +129,6 @@ export interface PaginatedResult<T> {
   limit: number;
 }
 
-/**
- * Fetches a paginated list of streams with optional filters.
- * @param filters - Optional filters for recipient, sender, status, asset, search query, sort, and pagination
- * @returns A PaginatedResult containing the stream data and pagination info
- */
 export async function listStreams(filters?: ListStreamsFilters): Promise<PaginatedResult<Stream>> {
   const params = new URLSearchParams();
   if (filters?.recipient) params.set("recipient", filters.recipient);
@@ -177,22 +148,12 @@ export async function listStreams(filters?: ListStreamsFilters): Promise<Paginat
   return body;
 }
 
-/**
- * Fetches all streams where the given account is the recipient.
- * @param accountId - The Stellar account ID to fetch streams for
- * @returns An array of Stream objects
- */
 export async function listRecipientStreams(accountId: string): Promise<Stream[]> {
   const response = await fetch(`${API_BASE}/recipients/${accountId}/streams`);
   const body = await parseResponse<{ data: Stream[] }>(response);
   return body.data;
 }
 
-/**
- * Constructs the CSV export URL with optional query parameters.
- * @param filters - Optional key-value pairs to append as query parameters
- * @returns The full CSV export URL string
- */
 export function getExportCsvUrl(filters?: Record<string, string>): string {
   // If API_BASE is absolute (e.g. http://localhost:3000/api), we use that directly.
   // Otherwise, we base it off window.location.origin
@@ -208,11 +169,6 @@ export function getExportCsvUrl(filters?: Record<string, string>): string {
   return url.toString();
 }
 
-/**
- * Creates a new payment stream by sending a POST request to the API.
- * @param payload - The stream creation payload with sender, recipient, asset, amount, and duration
- * @returns The created Stream object
- */
 export async function createStream(
   payload: CreateStreamPayload,
 ): Promise<Stream> {
@@ -237,11 +193,6 @@ export interface StreamFeeEstimate {
   feeXlm: string;
 }
 
-/**
- * Estimates the network fee for creating a stream by simulating the transaction.
- * @param payload - The stream creation payload to estimate fees for
- * @returns A StreamFeeEstimate with fee in both stroops and XLM
- */
 export async function estimateCreateStreamFee(
   payload: CreateStreamPayload,
 ): Promise<StreamFeeEstimate> {
@@ -261,11 +212,6 @@ export async function estimateCreateStreamFee(
   return body.data;
 }
 
-/**
- * Cancels a stream by sending a POST request to the API.
- * @param streamId - The ID of the stream to cancel
- * @returns The updated Stream object
- */
 export async function cancelStream(streamId: string): Promise<Stream> {
   const headers: Record<string, string> = {};
   if (authToken) {
@@ -280,11 +226,6 @@ export async function cancelStream(streamId: string): Promise<Stream> {
   return body.data;
 }
 
-/**
- * Pauses an active stream by sending a POST request to the API.
- * @param streamId - The ID of the stream to pause
- * @returns The updated Stream object
- */
 export async function pauseStream(streamId: string): Promise<Stream> {
   const headers: Record<string, string> = {};
   if (authToken) {
@@ -299,11 +240,6 @@ export async function pauseStream(streamId: string): Promise<Stream> {
   return body.data;
 }
 
-/**
- * Resumes a paused stream by sending a POST request to the API.
- * @param streamId - The ID of the stream to resume
- * @returns The updated Stream object
- */
 export async function resumeStream(streamId: string): Promise<Stream> {
   const headers: Record<string, string> = {};
   if (authToken) {
@@ -318,12 +254,6 @@ export async function resumeStream(streamId: string): Promise<Stream> {
   return body.data;
 }
 
-/**
- * Updates the start time of a scheduled stream by sending a PATCH request to the API.
- * @param streamId - The ID of the stream to update
- * @param startAt - The new start time as a Unix timestamp in seconds
- * @returns The updated Stream object
- */
 export async function updateStreamStartAt(
   streamId: string,
   startAt: number,
@@ -344,10 +274,6 @@ export async function updateStreamStartAt(
   return body.data;
 }
 
-/**
- * Fetches open GitHub issues for the project from the API.
- * @returns An array of OpenIssue objects
- */
 export async function listOpenIssues(): Promise<OpenIssue[]> {
   const response = await fetch(`${API_BASE}/open-issues`);
   const body = await parseResponse<{ data: OpenIssue[] }>(response);
@@ -365,22 +291,12 @@ export interface StreamEvent {
   metadata?: Record<string, any>;
 }
 
-/**
- * Fetches the event history for a specific stream.
- * @param streamId - The ID of the stream to get history for
- * @param signal - Optional AbortSignal for request cancellation
- * @returns An array of StreamEvent objects
- */
 export async function getStreamHistory(streamId: string, signal?: AbortSignal): Promise<StreamEvent[]> {
   const response = await fetch(`${API_BASE}/streams/${streamId}/history`, { signal });
   const body = await parseResponse<{ data: StreamEvent[] }>(response);
   return body.data;
 }
 
-/**
- * Fetches all events across all streams from the API.
- * @returns An array of StreamEvent objects
- */
 export async function listAllEvents(): Promise<StreamEvent[]> {
   const response = await fetch(`${API_BASE}/events`);
   const body = await parseResponse<{ data: StreamEvent[] }>(response);
@@ -394,11 +310,6 @@ export interface MetricsHistoryParams {
   endTimestamp: number;
 }
 
-/**
- * Fetches daily metrics history for the specified time range.
- * @param params - Object with startTimestamp and endTimestamp as Unix timestamps
- * @returns An array of daily metric objects
- */
 export async function fetchMetricsHistory(params: MetricsHistoryParams): Promise<any[]> {
   const searchParams = new URLSearchParams({
     start: params.startTimestamp.toString(),
@@ -421,21 +332,11 @@ export interface StreamStats {
   unique_recipients: number;
 }
 
-/**
- * Fetches aggregate stream statistics from the API.
- * @returns A StreamStats object with total, active, completed, and other metrics
- */
 export async function fetchStats(): Promise<StreamStats> {
   const response = await fetch(`${API_BASE}/stats`);
   const body = await parseResponse<{ data: StreamStats }>(response);
   return body.data;
 }
-/**
- * Fetches a single stream by ID with client-side caching.
- * @param streamId - The ID of the stream to fetch
- * @param signal - Optional AbortSignal for request cancellation (bypasses cache)
- * @returns The Stream object
- */
 export async function getStream(streamId: string, signal?: AbortSignal): Promise<Stream> {
   const url = `${API_BASE}/streams/${encodeURIComponent(streamId)}`;
   if (signal) {
@@ -454,10 +355,6 @@ export interface AppConfig {
   allowedAssets: string[];
 }
 
-/**
- * Fetches the application configuration including allowed asset codes.
- * @returns An AppConfig object with the allowed assets list
- */
 export async function getConfig(): Promise<AppConfig> {
   const response = await fetch(`${API_BASE}/config`);
   return parseResponse<AppConfig>(response);
@@ -502,7 +399,6 @@ export async function getSenderEvents(senderAddress: string, limit: number = 10)
   }
 }
 
-/** Clears the client-side fetch cache. */
 export function clearCache() {
   cache.clear();
 }

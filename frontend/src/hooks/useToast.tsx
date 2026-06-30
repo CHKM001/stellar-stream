@@ -26,11 +26,6 @@ const ToastContext = createContext<ToastContextValue | null>(null);
 const AUTO_DISMISS_MS = 4000;
 const MAX_VISIBLE_TOASTS = 3;
 
-/**
- * Toast provider component that manages notification state and renders toast messages.
- * Supports success, error, and info toast types with auto-dismiss after 4 seconds.
- * Maximum 3 visible toasts at once.
- */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const idRef = useRef(1);
@@ -75,11 +70,6 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * React hook that provides access to the toast notification system.
- * Must be used within a ToastProvider component.
- * @returns An object with toasts, showToast, and dismissToast functions
- */
 export function useToast() {
   const context = useContext(ToastContext);
   if (!context) {

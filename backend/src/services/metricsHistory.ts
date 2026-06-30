@@ -45,11 +45,6 @@ export async function getMetricsHistory(days: number): Promise<DailyMetric[]> {
   return result;
 }
 
-/**
- * Computes daily aggregate metrics for the past N days using stream_events timestamps.
- * @param days - Number of days to compute metrics for
- * @returns Array of DailyMetric objects, one per day
- */
 function computeMetricsHistory(days: number): DailyMetric[] {
   const db = getDb();
   const nowMs = Date.now();

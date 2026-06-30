@@ -6,31 +6,26 @@ export type ViewMode = "dashboard" | "recipient" | "sender";
 const VALID_STATUSES = new Set(["active", "scheduled", "completed", "canceled"]);
 const VALID_VIEWS = new Set<ViewMode>(["dashboard", "recipient", "sender"]);
 
-/** Sanitizes a URL parameter value, removing non-printable characters and enforcing a max length. */
 function sanitizeString(raw: string | null, maxLen = 64): string {
     if (!raw) return "";
     return raw.trim().replace(/[^\x20-\x7E]/g, "").slice(0, maxLen);
 }
 
-/** Parses a view mode from a URL parameter, defaulting to "dashboard" for invalid values. */
 function parseViewMode(raw: string | null): ViewMode {
     const v = sanitizeString(raw);
     return VALID_VIEWS.has(v as ViewMode) ? (v as ViewMode) : "dashboard";
 }
 
-/** Parses a status filter from a URL parameter, returning empty string for invalid values. */
 function parseStatus(raw: string | null): string {
     const v = sanitizeString(raw);
     return VALID_STATUSES.has(v) ? v : "";
 }
 
-/** Parses a page number from a URL parameter, returning undefined for invalid values. */
 function parsePage(raw: string | null): number | undefined {
     const n = raw ? parseInt(raw, 10) : NaN;
     return !isNaN(n) && n >= 1 ? n : undefined;
 }
 
-/** Reads all URL search parameters and returns a structured filter state object. */
 function readParams(): { view: ViewMode; filters: ListStreamsFilters; streamId: string | null } {
     const p = new URLSearchParams(window.location.search);
     const rawStreamId = sanitizeString(p.get("streamId"), 128);
@@ -48,7 +43,6 @@ function readParams(): { view: ViewMode; filters: ListStreamsFilters; streamId: 
     };
 }
 
-/** Builds a URL search string from the current view, filters, and selected stream ID. */
 function buildSearch(view: ViewMode, filters: ListStreamsFilters, streamId: string | null): string {
     const p = new URLSearchParams();
     if (view !== "dashboard") p.set("view", view);
@@ -73,12 +67,6 @@ export interface UrlFilterState {
     closeStream: () => void;
 }
 
-/**
- * React hook that synchronizes filter state with the URL search parameters.
- * Provides methods to update filters, view mode, and stream selection while
- * keeping the URL in sync via the History API.
- * @returns UrlFilterState with current filters and setter functions
- */
 export function useUrlFilters(): UrlFilterState {
     const initial = readParams();
     const [view, setViewState] = useState<ViewMode>(initial.view);

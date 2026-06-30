@@ -9,11 +9,6 @@ export interface OpenIssue {
   points: 100 | 150 | 200;
 }
 
-/**
- * Fetches open GitHub issues from the stellar-stream repository and maps them to
- * structured OpenIssue objects with complexity and point assignments.
- * @returns An array of OpenIssue objects, or an empty array on failure
- */
 export async function fetchOpenIssues(): Promise<OpenIssue[]> {
   try {
     const response = await fetch("https://api.github.com/repos/ritik4ever/stellar-stream/issues?state=open", {

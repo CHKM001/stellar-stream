@@ -54,10 +54,6 @@ if (!jwtSecret) {
   );
 }
 
-/**
- * Returns the JWT signing secret from the environment.
- * @returns The JWT secret string
- */
 export function getJwtSecret() {
   return jwtSecret as string;
 }
@@ -108,12 +104,6 @@ async function fetchAccountSigners(
   }
 }
 
-/**
- * Generates a SEP-10-style challenge transaction for Stellar account authentication.
- * The transaction is signed by the server's signing key and returned as a base64 XDR.
- * @param accountId - The Stellar account ID to generate the challenge for
- * @returns A base64-encoded XDR transaction envelope
- */
 export function generateChallenge(accountId: string): string {
   const serverKeypair = Keypair.fromSecret(SERVER_SIGNING_KEY);
   

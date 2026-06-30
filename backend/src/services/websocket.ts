@@ -12,10 +12,6 @@ interface WebSocketMessage {
 
 let wss: WebSocketServer | null = null;
 
-/**
- * Initializes the WebSocket server attached to the HTTP server on the /api/ws path.
- * @param server - The HTTP server to attach the WebSocket server to
- */
 export function initWebSocket(server: HttpServer): void {
   wss = new WebSocketServer({ server, path: "/api/ws" });
 
@@ -34,12 +30,6 @@ export function initWebSocket(server: HttpServer): void {
   logger.info("WebSocket server initialized on /api/ws");
 }
 
-/**
- * Broadcasts real-time stream progress updates to all connected WebSocket clients.
- * @param streamId - The ID of the stream being updated
- * @param vestedAmount - The current vested amount
- * @param percentComplete - The completion percentage (0-1)
- */
 export function broadcastStreamProgress(
   streamId: string,
   vestedAmount: number,
@@ -70,12 +60,6 @@ export function broadcastStreamProgress(
   });
 }
 
-/**
- * Broadcasts a stream event (e.g. created, claimed, canceled) to all connected WebSocket clients.
- * @param streamId - The ID of the stream the event belongs to
- * @param eventType - The type of event that occurred
- * @param data - Optional additional data for the event
- */
 export function broadcastStreamEvent(
   streamId: string,
   eventType: string,

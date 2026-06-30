@@ -1,9 +1,5 @@
 import { logger } from "../logger";
 
-/**
- * Custom error class for Soroban transaction submission failures.
- * Includes an optional HTTP status code and a recommended retry delay.
- */
 export class SorobanSubmitError extends Error {
   public readonly statusCode?: number;
   public readonly retryAfter: number;
@@ -18,7 +14,6 @@ export class SorobanSubmitError extends Error {
 
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
-/** Extracts an HTTP status code from an error object, checking common error property patterns. */
 function extractStatusCode(err: unknown): number | undefined {
   if (err && typeof err === "object") {
     const e = err as Record<string, any>;
@@ -27,7 +22,6 @@ function extractStatusCode(err: unknown): number | undefined {
   return undefined;
 }
 
-/** Determines whether an error is retryable (server errors, network issues) vs a client error. */
 function isRetryableError(err: unknown): boolean {
   const statusCode = extractStatusCode(err);
 
@@ -53,13 +47,6 @@ function isRetryableError(err: unknown): boolean {
   );
 }
 
-/**
- * Retries an async function with exponential backoff, only retrying on transient/network errors.
- * @param fn - The async function to execute with retry logic
- * @param maxRetries - Maximum number of retry attempts (default 3)
- * @returns The result of the function if successful
- * @throws {SorobanSubmitError} If all retry attempts fail
- */
 export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   maxRetries = 3,

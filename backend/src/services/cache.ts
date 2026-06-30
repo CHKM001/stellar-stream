@@ -18,7 +18,6 @@ export interface CacheAdapter {
 class InMemoryCache implements CacheAdapter {
     private cache = new Map<string, { data: any; expiresAt: number }>();
 
-    /** Retrieves a value from the in-memory cache by key, or null if expired/missing. */
     async get<T>(key: string): Promise<T | null> {
         const entry = this.cache.get(key);
         if (!entry) return null;
@@ -29,7 +28,6 @@ class InMemoryCache implements CacheAdapter {
         return entry.data;
     }
 
-    /** Stores a value in the in-memory cache with a time-to-live in seconds. */
     async set<T>(key: string, value: T, ttlSeconds = 5): Promise<void> {
         this.cache.set(key, {
             data: value,
@@ -37,7 +35,6 @@ class InMemoryCache implements CacheAdapter {
         });
     }
 
-    /** Deletes all cache entries whose key contains the given pattern substring. */
     async del(pattern: string): Promise<number> {
         let deleted = 0;
         for (const key of this.cache.keys()) {
@@ -49,12 +46,10 @@ class InMemoryCache implements CacheAdapter {
         return deleted;
     }
 
-    /** Deletes all entries from the in-memory cache. */
     async clear(): Promise<void> {
         this.cache.clear();
     }
 
-    /** Returns true since the in-memory cache is always considered connected. */
     isConnected(): boolean {
         return true;
     }
@@ -94,7 +89,6 @@ class RedisCache implements CacheAdapter {
         });
     }
 
-    /** Retrieves a value from Redis by key, parsing the JSON-encoded response. */
     async get<T>(key: string): Promise<T | null> {
         try {
             const value = await this.redis.get(key);
@@ -106,7 +100,6 @@ class RedisCache implements CacheAdapter {
         }
     }
 
-    /** Stores a value in Redis with an expiration time in seconds. */
     async set<T>(key: string, value: T, ttlSeconds = 5): Promise<void> {
         try {
             await this.redis.setex(key, ttlSeconds, JSON.stringify(value));
@@ -115,7 +108,6 @@ class RedisCache implements CacheAdapter {
         }
     }
 
-    /** Deletes all Redis keys that contain the given pattern substring. */
     async del(pattern: string): Promise<number> {
         try {
             const keys = await this.redis.keys(`*${pattern}*`);
@@ -127,7 +119,6 @@ class RedisCache implements CacheAdapter {
         }
     }
 
-    /** Flushes the entire Redis database. */
     async clear(): Promise<void> {
         try {
             await this.redis.flushdb();
@@ -136,12 +127,10 @@ class RedisCache implements CacheAdapter {
         }
     }
 
-    /** Returns true if the Redis connection is currently active. */
     isConnected(): boolean {
         return this.connected;
     }
 
-    /** Gracefully closes the Redis connection. */
     async disconnect(): Promise<void> {
         await this.redis.quit();
     }

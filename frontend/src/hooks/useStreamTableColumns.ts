@@ -31,7 +31,6 @@ const DEFAULT_VISIBILITY: ColumnVisibility = {
   pausedDuration: false,
 };
 
-/** Loads the column visibility preferences from localStorage, defaulting all to hidden. */
 function loadVisibility(): ColumnVisibility {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -43,16 +42,10 @@ function loadVisibility(): ColumnVisibility {
   }
 }
 
-/** Persists the column visibility preferences to localStorage. */
 function saveVisibility(visibility: ColumnVisibility): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(visibility));
 }
 
-/**
- * React hook that manages optional stream table column visibility preferences,
- * persisting them to localStorage across sessions.
- * @returns An object with the current visibility state, toggleColumn, and isVisible functions
- */
 export function useStreamTableColumns() {
   const [visibility, setVisibility] = useState<ColumnVisibility>(loadVisibility);
 

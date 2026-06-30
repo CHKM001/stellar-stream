@@ -4,7 +4,6 @@ export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "stellar-stream-theme";
 
-/** Reads the initial theme from localStorage or the system prefers-color-scheme preference. */
 function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -23,7 +22,6 @@ function getInitialTheme(): Theme {
   return "light";
 }
 
-/** Applies the theme by adding or removing the "dark" class on the document root element. */
 function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   if (theme === "dark") {
@@ -33,11 +31,6 @@ function applyTheme(theme: Theme): void {
   }
 }
 
-/**
- * React hook that manages the light/dark theme preference, persisting it to localStorage
- * and applying the appropriate CSS class on the document root.
- * @returns An object with the current theme and a toggleTheme function
- */
 export function useTheme(): { theme: Theme; toggleTheme: () => void } {
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
 

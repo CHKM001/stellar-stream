@@ -24,7 +24,6 @@ interface EventRow {
   metadata: string | null;
 }
 
-/** Converts a database row object into a typed StreamEvent record. */
 function rowToEvent(row: EventRow): StreamEvent {
   return {
     id: row.id,
@@ -38,16 +37,6 @@ function rowToEvent(row: EventRow): StreamEvent {
   };
 }
 
-/**
- * Records a stream event in the database using the global database handle.
- * @param streamId - The ID of the stream this event belongs to
- * @param eventType - The type of event (created, claimed, canceled, etc.)
- * @param timestamp - Unix timestamp of when the event occurred
- * @param actor - Optional account ID of the actor who triggered the event
- * @param amount - Optional amount associated with the event
- * @param metadata - Optional additional data for the event
- * @param ledgerSequence - Optional Stellar ledger sequence number for deduplication
- */
 export function recordEvent(
   streamId: string,
   eventType: StreamEventType,
@@ -90,14 +79,6 @@ export function recordEventWithDb(
   });
 }
 
-/**
- * Retrieves paginated event history for a specific stream.
- * @param streamId - The ID of the stream to retrieve events for
- * @param limit - Maximum number of events to return (default 20)
- * @param offset - Number of events to skip for pagination (default 0)
- * @param order - Sort order: 'asc' for oldest first, 'desc' for newest first (default 'desc')
- * @returns Array of StreamEvent objects
- */
 export function getStreamHistory(streamId: string, limit = 20, offset = 0, order: 'asc' | 'desc' = 'desc'): StreamEvent[] {
   const db = getDb();
   const orderClause = order === 'asc' ? 'ASC' : 'DESC';
@@ -109,13 +90,6 @@ export function getStreamHistory(streamId: string, limit = 20, offset = 0, order
   return rows.map(rowToEvent);
 }
 
-/**
- * Retrieves all events across all streams with optional cursor-based pagination.
- * @param limit - Maximum number of events to return (default 100)
- * @param offset - Number of events to skip for pagination (default 0)
- * @param cursor - Optional cursor (event ID) for keyset pagination
- * @returns Array of StreamEvent objects sorted by timestamp descending
- */
 export function getAllEvents(limit = 100, offset = 0, cursor?: number): StreamEvent[] {
   const db = getDb();
   let query = `SELECT * FROM stream_events`;
@@ -133,14 +107,6 @@ export function getAllEvents(limit = 100, offset = 0, cursor?: number): StreamEv
   return rows.map(rowToEvent);
 }
 
-/**
- * Retrieves global events with optional event type filtering and cursor-based pagination.
- * @param limit - Maximum number of events to return
- * @param offset - Number of events to skip for pagination
- * @param eventType - Optional event type to filter by
- * @param cursor - Optional cursor (event ID) for keyset pagination
- * @returns Array of StreamEvent objects
- */
 export function getGlobalEvents(
   limit: number,
   offset: number,
@@ -184,13 +150,6 @@ export function getGlobalEvents(
   return rows.map(rowToEvent);
 }
 
-/**
- * Counts all events, optionally filtered by event type, stream, or time range.
- * @param eventType - Optional event type to filter the count
- * @param streamId - Optional stream ID to filter the count
- * @param since - Optional timestamp; only count events after this time
- * @returns The total number of matching events
- */
 export function countAllEvents(
   eventType?: StreamEventType,
   streamId?: string,
@@ -224,11 +183,6 @@ export function countAllEvents(
   return row.count;
 }
 
-/**
- * Counts the total number of events for a specific stream.
- * @param streamId - The ID of the stream to count events for
- * @returns The number of events associated with the stream
- */
 export function countStreamEvents(streamId: string): number {
   const db = getDb();
   const row = db
@@ -244,11 +198,6 @@ export interface StreamEventSummary {
   lastEventAt?: number;
 }
 
-/**
- * Returns a summary of events for a stream, including counts by type and time bounds.
- * @param streamId - The ID of the stream to summarize
- * @returns A StreamEventSummary with total count, per-type breakdown, and first/last timestamps
- */
 export function getStreamEventSummary(streamId: string): StreamEventSummary {
   const db = getDb();
 
@@ -279,12 +228,6 @@ export function getStreamEventSummary(streamId: string): StreamEventSummary {
   };
 }
 
-/**
- * Checks whether a specific event type has been recorded for a stream.
- * @param streamId - The ID of the stream to check
- * @param eventType - The event type to look for
- * @returns True if the event exists, false otherwise
- */
 export function streamHasEvent(
   streamId: string,
   eventType: StreamEventType,

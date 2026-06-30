@@ -5,7 +5,6 @@ type WebhookUrlValidationResult = {
   reason?: string;
 };
 
-/** Checks whether an IPv4 address belongs to a private or reserved range (RFC 1918, loopback, link-local). */
 function isPrivateIpv4(hostname: string): boolean {
   const octets = hostname.split(".").map(Number);
   if (octets.length !== 4 || octets.some((octet) => Number.isNaN(octet))) {
@@ -23,7 +22,6 @@ function isPrivateIpv4(hostname: string): boolean {
   );
 }
 
-/** Checks whether an IPv6 address belongs to a private or loopback range. */
 function isPrivateIpv6(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
   return (
@@ -34,7 +32,6 @@ function isPrivateIpv6(hostname: string): boolean {
   );
 }
 
-/** Checks whether a hostname resolves to localhost or a private network address. */
 function isBlockedHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
 
@@ -53,11 +50,6 @@ function isBlockedHostname(hostname: string): boolean {
   return false;
 }
 
-/**
- * Validates a webhook URL to ensure it uses HTTPS and does not target localhost or private networks.
- * @param url - The URL string to validate
- * @returns An object with `valid: true` or `valid: false` with a reason string
- */
 export function validateWebhookUrl(url: string): WebhookUrlValidationResult {
   let parsed: URL;
 
