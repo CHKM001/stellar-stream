@@ -40,6 +40,7 @@ export class CircuitBreaker {
     this.timeoutMs = timeoutMs;
   }
 
+  /** Returns the current circuit breaker state, transitioning from OPEN to HALF_OPEN if the timeout has elapsed. */
   public getState(): CircuitState {
     if (this.state === CircuitState.OPEN) {
       const now = Date.now();
@@ -50,6 +51,7 @@ export class CircuitBreaker {
     return this.state;
   }
 
+  /** Records a successful operation, resetting the failure count and closing the circuit if it was open. */
   public onSuccess(): void {
     if (this.state !== CircuitState.CLOSED) {
       logger.info("circuit breaker probe succeeded");
@@ -58,6 +60,7 @@ export class CircuitBreaker {
     this.failureCount = 0;
   }
 
+  /** Records a failed operation, incrementing the failure count and opening the circuit if the threshold is reached. */
   public onFailure(): void {
     this.failureCount++;
     this.lastFailureTime = Date.now();
@@ -71,6 +74,7 @@ export class CircuitBreaker {
     }
   }
 
+  /** Updates the circuit breaker state and synchronizes the Prometheus gauge metric. */
   private setState(newState: CircuitState): void {
     if (this.state !== newState) {
       logger.info({ from: this.state, to: newState }, "circuit breaker state changed");
@@ -88,10 +92,20 @@ export class CircuitBreaker {
 const CIRCUIT_BREAKER_TIMEOUT_MS = Number(process.env.CIRCUIT_BREAKER_TIMEOUT_MS ?? 60000);
 const circuitBreaker = new CircuitBreaker(CIRCUIT_BREAKER_TIMEOUT_MS);
 
+/**
+ * Returns the current state of the event indexer circuit breaker.
+ * @returns The CircuitState enum value (CLOSED, OPEN, or HALF_OPEN)
+ */
 export function getCircuitBreakerStatus(): CircuitState {
   return circuitBreaker.getState();
 }
 
+/**
+ * Initializes the Stellar event indexer with the RPC server URL and contract ID.
+ * @param rpcUrl - The Stellar Horizon/Soroban RPC server URL
+ * @param contractIdParam - The Soroban contract ID to index events from
+ * @param networkPass - Optional network passphrase override (defaults to TESTNET)
+ */
 export function initIndexer(
   rpcUrl: string,
   contractIdParam: string,
@@ -118,6 +132,10 @@ export function initIndexer(
   }
 }
 
+/**
+ * Starts the background event indexer that polls for new contract events at a regular interval.
+ * @param intervalMs - Polling interval in milliseconds (default 10000)
+ */
 export function startIndexer(intervalMs = 10000): void {
   if (indexerInterval) {
     return;
@@ -136,6 +154,7 @@ export function startIndexer(intervalMs = 10000): void {
   });
 }
 
+/** Stops the background event indexer polling interval. */
 export function stopIndexer(): void {
   if (indexerInterval) {
     clearInterval(indexerInterval);
@@ -144,6 +163,10 @@ export function stopIndexer(): void {
   }
 }
 
+/**
+ * Fetches and processes new contract events from the Stellar network since the last processed ledger.
+ * Updates the indexer cursor atomically within a database transaction.
+ */
 async function indexEvents(): Promise<void> {
   if (!rpcServer || !contractId) {
     return;

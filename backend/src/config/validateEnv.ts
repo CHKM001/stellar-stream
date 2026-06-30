@@ -105,6 +105,11 @@ export interface ValidatedConfig {
   allowedOrigins: string | undefined;
 }
 
+/**
+ * Validates all environment variables at startup using Zod schemas and returns
+ * a typed configuration object. Exits the process if required config is missing or invalid.
+ * @returns A ValidatedConfig object with all configuration values
+ */
 export function validateEnv(): ValidatedConfig {
   // Parse environment variables
   const parsed = envSchema.safeParse(process.env);

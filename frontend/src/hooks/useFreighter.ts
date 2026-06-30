@@ -35,6 +35,12 @@ export interface FreighterState {
 const STORAGE_KEY = "stellar_stream_auth_token";
 const NETWORK = "TESTNET";
 
+/**
+ * React hook that manages Freighter wallet connection, authentication, and signing.
+ * Handles extension detection, SEP-10 challenge-response authentication,
+ * JWT token persistence, and arbitrary blob signing.
+ * @returns FreighterState with connection status, address, and action methods
+ */
 export function useFreighter(): FreighterState {
   const [installed, setInstalled] = useState(false);
   const [allowed, setAllowed] = useState(false);

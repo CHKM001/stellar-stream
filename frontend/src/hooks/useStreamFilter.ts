@@ -23,6 +23,7 @@ const EMPTY_FILTERS: StreamFilters = {
   page: 1,
 };
 
+/** Reads the initial filter state from URL search parameters. */
 function getFiltersFromUrl(): StreamFilters {
   const params = new URLSearchParams(window.location.search);
   const rawPage = params.get("page");
@@ -38,10 +39,17 @@ function getFiltersFromUrl(): StreamFilters {
   };
 }
 
+/** Performs a case-insensitive substring match. */
 function includesCaseInsensitive(value: string, needle: string): boolean {
   return value.toLowerCase().includes(needle.toLowerCase());
 }
 
+/**
+ * React hook that filters a list of streams based on URL-synchronized filter criteria.
+ * Supports filtering by status, sender, recipient, asset code, and free-text search.
+ * @param streams - The full array of Stream objects to filter
+ * @returns An object with current filters, a setFilter function, and the filteredStreams array
+ */
 export function useStreamFilter(streams: Stream[]) {
   const [filters, setFilters] = useState<StreamFilters>(() => getFiltersFromUrl());
 

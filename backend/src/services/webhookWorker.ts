@@ -8,6 +8,10 @@ import { logger } from "../logger";
 let isProcessing = false;
 let pollingInterval: NodeJS.Timeout | null = null;
 
+/**
+ * Processes pending webhook deliveries from the queue, delivering them to the configured
+ * destination URL with retry logic and dead-letter handling.
+ */
 export const processWebhookQueue = async () => {
   if (isProcessing) return;
   isProcessing = true;
@@ -109,6 +113,10 @@ export const processWebhookQueue = async () => {
   }
 };
 
+/**
+ * Starts the webhook worker that polls for pending deliveries at a regular interval.
+ * @param intervalMs - Polling interval in milliseconds (default 5000)
+ */
 export const startWebhookWorker = (intervalMs: number = 5000) => {
   if (pollingInterval) {
     clearInterval(pollingInterval);
@@ -120,6 +128,7 @@ export const startWebhookWorker = (intervalMs: number = 5000) => {
   logger.info({ intervalMs }, "webhook worker started");
 };
 
+/** Stops the webhook worker polling interval. */
 export const stopWebhookWorker = () => {
   if (pollingInterval) {
     clearInterval(pollingInterval);

@@ -16,6 +16,12 @@ interface MetricsHistoryState {
   error: Error | null;
 }
 
+/**
+ * React hook that fetches and manages daily metrics history from the API.
+ * Automatically refetches when the time range changes.
+ * @param timeRange - The time range to fetch: "7d", "30d", or "all"
+ * @returns An object with the metrics data, loading state, and any error
+ */
 export function useMetricsHistory(timeRange: TimeRange): MetricsHistoryState {
   const [state, setState] = useState<MetricsHistoryState>({
     data: [],

@@ -20,6 +20,14 @@ type ApiErrorOptions = {
   details?: ValidationIssue[];
 };
 
+/**
+ * Builds a standardized API error response object with request metadata.
+ * @param req - The incoming Express request
+ * @param statusCode - The HTTP status code for the error
+ * @param error - A human-readable error message
+ * @param options - Optional error code and validation details
+ * @returns A structured API error response object
+ */
 export function buildApiErrorResponse(
   req: Request,
   statusCode: number,
@@ -36,6 +44,14 @@ export function buildApiErrorResponse(
   };
 }
 
+/**
+ * Sends a standardized JSON error response to the client.
+ * @param req - The incoming Express request
+ * @param res - The Express response object
+ * @param statusCode - The HTTP status code for the error
+ * @param error - A human-readable error message
+ * @param options - Optional error code and validation details
+ */
 export function sendApiError(
   req: Request,
   res: Response,
@@ -46,6 +62,12 @@ export function sendApiError(
   return res.status(statusCode).json(buildApiErrorResponse(req, statusCode, error, options));
 }
 
+/**
+ * Sends a 400 validation error response derived from Zod schema issues.
+ * @param req - The incoming Express request
+ * @param res - The Express response object
+ * @param issues - Array of Zod validation issues to report
+ */
 export function sendValidationError(
   req: Request,
   res: Response,
@@ -57,6 +79,14 @@ export function sendValidationError(
   });
 }
 
+/**
+ * Sends a consistent JSON error response with request ID tracking.
+ * @param res - The Express response object
+ * @param status - The HTTP status code for the error
+ * @param message - A human-readable error message
+ * @param req - The incoming Express request
+ * @param options - Optional error code and validation details
+ */
 export function sendError(
   res: Response,
   status: number,
@@ -64,10 +94,17 @@ export function sendError(
   req: Request,
   options: ApiErrorOptions = {}
 ) {
-  // Helper function for consistent error responses with requestId
   return res.status(status).json(buildApiErrorResponse(req, status, message, options));
 }
 
+/**
+ * Normalizes an unknown error value into a structured error object with status, message, and code.
+ * Extracts statusCode, message, and code from the error if it has those properties,
+ * otherwise returns the fallback message with a 500 status.
+ * @param error - The unknown error value to normalize
+ * @param fallbackMessage - Default message to use when the error lacks a readable message
+ * @returns A normalized error object with statusCode, message, and optional code
+ */
 export function normalizeUnknownApiError(
   error: unknown,
   fallbackMessage: string,

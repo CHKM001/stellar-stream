@@ -5,6 +5,9 @@ import { logger } from "../logger";
 let broadcasterInterval: NodeJS.Timeout | null = null;
 let broadcasterInFlight = false;
 
+/**
+ * Runs a single broadcast cycle, calculating and broadcasting progress for all active streams.
+ */
 async function runBroadcastCycle(): Promise<void> {
   if (broadcasterInFlight) {
     return;
@@ -30,6 +33,10 @@ async function runBroadcastCycle(): Promise<void> {
   }
 }
 
+/**
+ * Starts the background broadcaster that periodically sends stream progress to WebSocket clients.
+ * @param intervalMs - Broadcasting interval in milliseconds (default 5000)
+ */
 export function startStreamProgressBroadcaster(intervalMs = 5000): void {
   if (broadcasterInterval) {
     return;
@@ -44,6 +51,7 @@ export function startStreamProgressBroadcaster(intervalMs = 5000): void {
   }, intervalMs);
 }
 
+/** Stops the background stream progress broadcaster. */
 export function stopStreamProgressBroadcaster(): void {
   if (!broadcasterInterval) {
     return;

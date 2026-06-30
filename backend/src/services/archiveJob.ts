@@ -4,6 +4,10 @@ import { logger } from "../logger";
 let archiveInterval: NodeJS.Timeout | null = null;
 let archiveInFlight = false;
 
+/**
+ * Runs a single archive cycle, moving old completed/canceled streams to the archive table.
+ * Skips execution if a previous cycle is still in progress.
+ */
 async function runArchiveCycle(): Promise<void> {
   if (archiveInFlight) {
     logger.warn("skipping archive cycle because a previous run is still in progress");
@@ -21,6 +25,10 @@ async function runArchiveCycle(): Promise<void> {
   }
 }
 
+/**
+ * Starts the background archive job that periodically moves old streams to the archive table.
+ * @param intervalMs - Archive interval in milliseconds (default 86400000 = daily)
+ */
 export function startArchiveJob(intervalMs = 86400000): void {
   if (archiveInterval) {
     return;
@@ -39,6 +47,7 @@ export function startArchiveJob(intervalMs = 86400000): void {
   });
 }
 
+/** Stops the background archive job. */
 export function stopArchiveJob(): void {
   if (!archiveInterval) {
     return;

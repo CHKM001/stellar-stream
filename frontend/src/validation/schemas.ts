@@ -63,6 +63,12 @@ export const createStreamPayloadSchema = z
     }
   });
 
+/**
+ * Creates a Zod schema for validating stream creation payloads, restricted to a specific
+ * set of allowed asset codes.
+ * @param allowedAssets - Array of permitted asset code strings (e.g. ["USDC", "XLM"])
+ * @returns A Zod schema that validates both payload structure and asset code
+ */
 export function createStreamPayloadWithAllowedAssetsSchema(
   allowedAssets: string[],
 ) {
@@ -90,6 +96,11 @@ export type ValidationIssue = {
   message: string;
 };
 
+/**
+ * Converts an array of Zod issues into structured validation issues with field and message.
+ * @param issues - Array of Zod validation issues
+ * @returns Array of ValidationIssue objects with field path and message
+ */
 export function zodIssuesToValidationIssues(issues: z.ZodIssue[]): ValidationIssue[] {
   return issues.map((issue) => ({
     field: issue.path.length > 0 ? issue.path.join(".") : "body",
@@ -97,6 +108,11 @@ export function zodIssuesToValidationIssues(issues: z.ZodIssue[]): ValidationIss
   }));
 }
 
+/**
+ * Converts an array of Zod issues into a single human-readable error message string.
+ * @param issues - Array of Zod validation issues
+ * @returns A semicolon-separated string of "field: message" pairs
+ */
 export function zodIssuesToErrorMessage(issues: z.ZodIssue[]): string {
   return zodIssuesToValidationIssues(issues)
     .map(({ field, message }) => `${field}: ${message}`)
