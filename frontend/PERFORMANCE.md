@@ -29,7 +29,7 @@ Results are saved in `frontend/dist/stats.html`.
 Monitor these metrics when making bundle-related changes:
 
 - **Total Bundle Size**: Target < 500KB (gzipped < 150KB)
-- **Main Chunk**: Should be the majority of the bundle
+- **Main Chunk**: Should remain minimal; route chunks carry the bulk
 - **Vendor Chunk**: Contains third-party dependencies (React, Stellar SDK, etc.)
 
 ## Known Large Dependencies
@@ -48,7 +48,7 @@ Monitor these metrics when making bundle-related changes:
 ## Optimization Strategies
 
 ### Code Splitting
-- Routes are lazy-loaded using React Router (see routes.tsx)
+- Routes are lazy-loaded using React Router (see `App.tsx`)
 - Heavy components should use dynamic imports when not immediately needed
 - Avoid importing entire libraries when only specific functions are used
 
@@ -74,4 +74,4 @@ Monitor these metrics when making bundle-related changes:
 ## Related Documentation
 
 - [Vite Build Guide](https://vitejs.dev/guide/build.html)
-- [Bundle Visualizer Docs](https://github.com/Tresjs/vite-bundle-visualizer)
+- [Bundle Visualizer Docs](https://github.com/btd/rollup-plugin-visualizer)

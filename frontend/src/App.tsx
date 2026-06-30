@@ -81,7 +81,7 @@ function AppContent() {
 
       <Suspense fallback={<div className="app-shell">Loading…</div>}>
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<DashboardPage wallet={wallet} />} />
           <Route
             path="/sender"
             element={<SenderDashboard senderAddress={wallet.address} onEditStartTime={() => {}} />}

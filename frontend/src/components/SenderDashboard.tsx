@@ -162,7 +162,7 @@ export function SenderDashboard({ senderAddress, onEditStartTime }: SenderDashbo
     );
   }
 
-  if (streams.length === 0) {
+  if (streams.length === 0 && !showCreateForm) {
     return (
       <div className="card recipient-dashboard-card">
         <h2 className="recipient-dashboard-title">Sender Dashboard</h2>

@@ -16,7 +16,7 @@ const securityHeaders = {
   [cspHeaderName]: CSP_POLICY,
 };
 
-export default defineConfig({
+export default defineConfig(({ command, mode }) => ({
   plugins: [
     react(),
     {
@@ -49,7 +49,7 @@ export default defineConfig({
         });
       },
     },
-    ...(process.env.VITE_ANALYZE === 'true' ? [visualizer({ 
+    ...(mode === 'analyze' ? [visualizer({ 
       open: process.env.CI !== 'true',
       filename: 'dist/stats.html',
       gzipSize: true,
@@ -136,4 +136,4 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
   },
-});
+}));

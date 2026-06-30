@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:analyze": "tsc && vite build --mode analyze",
+    "build:analyze": "tsc && VITE_ANALYZE=true vite build --mode analyze",
     "preview": "vite preview",
     "test": "vitest",
     "test:e2e": "npx playwright test --config=playwright.config.ts",

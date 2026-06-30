@@ -6,7 +6,7 @@ import { StreamDetailDrawer } from "../components/StreamDetailDrawer";
 import { StreamMetricsChart } from "../components/StreamMetricsChart";
 import { StreamTimeline } from "../components/StreamTimeline";
 import { StreamsTable } from "../components/StreamsTable";
-import { useFreighter } from "../hooks/useFreighter";
+import { useFreighter, type FreighterState } from "../hooks/useFreighter";
 import { useMetricsHistory } from "../hooks/useMetricsHistory";
 import { defaultStreamFilters, useStreamFilter } from "../hooks/useStreamFilter";
 import { useToast } from "../hooks/useToast";
@@ -26,8 +26,13 @@ import {
 import { ListStreamsFilters } from "../services/api";
 import { OpenIssue, Stream } from "../types/stream";
 
-export function DashboardPage() {
-  const wallet = useFreighter();
+export interface DashboardPageProps {
+  wallet?: FreighterState;
+}
+
+export function DashboardPage({ wallet: propWallet }: DashboardPageProps) {
+  const walletFromHook = useFreighter();
+  const wallet = propWallet || walletFromHook;
   const { showToast } = useToast();
   const { filters: urlFilters, setFilters: setUrlFilters } = useUrlFilters();
   const [detailStreamId, setDetailStreamId] = useState<string | null>(null);
@@ -50,6 +55,7 @@ export function DashboardPage() {
   const { filters, filteredStreams, setFilter } = useStreamFilter(streams);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const wsUrl = getWebSocketUrl();
   const { lastMessage } = useWebSocket<{
@@ -106,17 +112,18 @@ export function DashboardPage() {
     const result = await listStreams({ ...currentFilters, limit: 20 });
     setStreams(result.data);
     setHasMore(result.page * result.limit < result.total);
+    setCurrentPage(result.page);
   }
 
   async function loadMore(): Promise<void> {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
-      const currentPage = urlFilters.page ?? 1;
       const nextPage = currentPage + 1;
       const result = await listStreams({ ...apiFilters, page: nextPage, limit: 20 });
       setStreams((prev) => [...prev, ...result.data]);
       setHasMore(result.page * result.limit < result.total);
+      setCurrentPage(result.page);
     } finally {
       setLoadingMore(false);
     }
