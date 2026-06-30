@@ -79,7 +79,7 @@ describe("updateStreamStartAt", () => {
   });
 
   describe("Successful updates", () => {
-    it("should update start time of a scheduled stream and persist changes", () => {
+    it("should update start time of a scheduled stream and persist changes", async () => {
       const streamId = "1";
       const oldStartAt = mockNow + 3600; // 1 hour from now
       const newStartAt = mockNow + 7200; // 2 hours from now
@@ -97,7 +97,7 @@ describe("updateStreamStartAt", () => {
 
       mockState.streams.set(streamId, scheduledStream);
 
-      const result = updateStreamStartAt(streamId, newStartAt);
+      const result = await updateStreamStartAt(streamId, newStartAt);
 
       // Verify the stream's startAt was updated
       expect(result.startAt).toBe(newStartAt);
@@ -313,7 +313,7 @@ describe("updateStreamStartAt", () => {
   });
 
   describe("Edge cases", () => {
-    it("should handle updating start time to the same value", () => {
+    it("should handle updating start time to the same value", async () => {
       const streamId = "8";
       const startAt = mockNow + 3600;
       
@@ -330,7 +330,7 @@ describe("updateStreamStartAt", () => {
 
       mockState.streams.set(streamId, scheduledStream);
 
-      const result = updateStreamStartAt(streamId, startAt);
+      const result = await updateStreamStartAt(streamId, startAt);
 
       // Should still work and record event
       expect(result.startAt).toBe(startAt);
@@ -345,7 +345,7 @@ describe("updateStreamStartAt", () => {
       );
     });
 
-    it("should handle updating start time to a past timestamp for scheduled stream", () => {
+    it("should handle updating start time to a past timestamp for scheduled stream", async () => {
       const streamId = "9";
       const oldStartAt = mockNow + 3600;
       const newStartAt = mockNow - 1800; // Past time
@@ -365,10 +365,11 @@ describe("updateStreamStartAt", () => {
 
       // This should work - the function doesn't validate against past times
       // (that validation might be at the API layer or business logic layer)
-      const result = updateStreamStartAt(streamId, newStartAt);
+      const result = await updateStreamStartAt(streamId, newStartAt);
 
       expect(result.startAt).toBe(newStartAt);
       expect(eventHistoryMocks.recordEventWithDb).toHaveBeenCalled();
     });
   });
 });
+

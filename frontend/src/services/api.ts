@@ -283,7 +283,7 @@ export async function listOpenIssues(): Promise<OpenIssue[]> {
 export interface StreamEvent {
   id: number;
   streamId: string;
-  eventType: "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed";
+  eventType: "created" | "claimed" | "canceled" | "start_time_updated" | "paused" | "resumed" | "cliff_reached";
   timestamp: number;
   actor?: string;
   amount?: number;
@@ -363,4 +363,5 @@ export async function getConfig(): Promise<AppConfig> {
 export function clearCache() {
   cache.clear();
 }
+
 

@@ -111,8 +111,8 @@ export function SenderDashboard({ senderAddress, onEditStartTime }: SenderDashbo
     setCreateError(null);
     try {
       await createStream(payload);
-      const data = await listStreams({ sender: senderAddress! });
-      setStreams(data);
+      const result = await listStreams({ sender: senderAddress! });
+      setStreams(result.data);
       setShowCreateForm(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create stream.";
@@ -162,7 +162,6 @@ export function SenderDashboard({ senderAddress, onEditStartTime }: SenderDashbo
     );
   }
 
-  if (streams.length === 0 && !showCreateForm) {
   if (streams.length === 0) {
     return (
       <div className="card recipient-dashboard-card">
@@ -372,3 +371,4 @@ export function SenderDashboard({ senderAddress, onEditStartTime }: SenderDashbo
     </div>
   );
 }
+

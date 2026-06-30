@@ -498,7 +498,6 @@ describe("validateEnv", () => {
       );
     });
   });
-});
 
 describe("ADMIN_API_KEY validation", () => {
   it("should accept ADMIN_API_KEY with 32+ characters", () => {
@@ -597,4 +596,5 @@ describe("ADMIN_API_KEY validation", () => {
     );
     expect(warnCalls).toHaveLength(0);
   });
+});
 });

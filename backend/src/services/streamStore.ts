@@ -862,6 +862,7 @@ export async function createStream(input: StreamInput): Promise<StreamRecord> {
     startAt,
     createdAt: nowInSeconds(),
     pausedDuration: 0,
+    cliffSeconds: input.cliffSeconds ?? 0,
   };
 
   // Atomically write the stream row and the creation event.
