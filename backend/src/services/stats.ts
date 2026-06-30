@@ -31,6 +31,12 @@ let cachedStreamStats: StreamStats | null = null;
 let cachedGlobalStats: GlobalStats | null = null;
 let cacheExpiresAt = 0;
 
+/**
+ * Returns cached stream statistics including total, active, completed, canceled counts,
+ * total vested amount, average duration, and unique sender/recipient counts.
+ * Results are cached for 30 seconds.
+ * @returns StreamStats with aggregate stream metrics
+ */
 export function getStreamStats(): StreamStats {
   const now = Date.now();
   if (cachedStreamStats && now < cacheExpiresAt) {
@@ -90,6 +96,12 @@ export function getStreamStats(): StreamStats {
   return cachedStreamStats;
 }
 
+/**
+ * Returns cached global statistics including status breakdown, total vested/amount,
+ * unique senders/recipients, and local vs on-chain stream counts.
+ * Results are cached for 30 seconds.
+ * @returns GlobalStats with comprehensive stream metrics
+ */
 export function getGlobalStats(): GlobalStats {
   const now = Date.now();
   if (cachedGlobalStats && now < cacheExpiresAt) {

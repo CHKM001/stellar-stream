@@ -11,6 +11,14 @@ const WS_OPEN = 1;
 const WS_CLOSING = 2;
 const WS_CLOSED = 3;
 
+/**
+ * React hook that manages a WebSocket connection with automatic reconnection
+ * using exponential backoff. Parses incoming JSON messages and exposes the
+ * latest message and connection state.
+ * @param url - The WebSocket URL to connect to
+ * @param options - Optional configuration with an onMessage callback
+ * @returns An object with the lastMessage and readyState
+ */
 export function useWebSocket<T>(
   url: string,
   options?: { onMessage?: (data: T) => void },

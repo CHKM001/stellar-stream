@@ -5,6 +5,7 @@ const STELLAR_SECRET_REGEX = /^S[0-9A-Z]{55}$/;
 const isProduction =
   process.env.NODE_ENV === "production" || process.env.NODE_ENV === "test";
 
+/** Redacts Stellar secret keys matching the S... pattern from a single value. */
 function redactValue(value: unknown): unknown {
   if (typeof value === "string" && STELLAR_SECRET_REGEX.test(value)) {
     return "[REDACTED]";
@@ -12,6 +13,7 @@ function redactValue(value: unknown): unknown {
   return value;
 }
 
+/** Recursively redacts sensitive fields (secretKey, privateKey, seed) and Stellar secret patterns from an object. */
 function redactObject(obj: any): any {
   if (obj == null) return obj;
   if (Array.isArray(obj)) return obj.map(redactObject);

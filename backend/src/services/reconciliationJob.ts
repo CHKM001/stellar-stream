@@ -5,6 +5,10 @@ import { logger } from "../logger";
 let reconciliationInterval: NodeJS.Timeout | null = null;
 let reconciliationInFlight = false;
 
+/**
+ * Runs a single reconciliation cycle: reconciles missing streams and checks for count discrepancies.
+ * Skips execution if a previous cycle is still in progress.
+ */
 async function runReconciliationCycle(): Promise<void> {
   if (reconciliationInFlight) {
     logger.warn("skipping reconciliation cycle because a previous run is still in progress");
@@ -20,6 +24,9 @@ async function runReconciliationCycle(): Promise<void> {
   }
 }
 
+/**
+ * Compares the on-chain stream count with the local database count and logs a warning if they differ.
+ */
 async function checkStreamCountDiscrepancy(): Promise<void> {
   const onChainCount = await getOnChainStreamCount();
   if (onChainCount === null) return;
@@ -36,6 +43,10 @@ async function checkStreamCountDiscrepancy(): Promise<void> {
   }
 }
 
+/**
+ * Starts the background reconciliation job that periodically syncs local state with the Stellar chain.
+ * @param intervalMs - Reconciliation interval in milliseconds (default 60000)
+ */
 export function startReconciliationJob(intervalMs = 60000): void {
   if (reconciliationInterval) {
     return;
@@ -54,6 +65,7 @@ export function startReconciliationJob(intervalMs = 60000): void {
   });
 }
 
+/** Stops the background reconciliation job. */
 export function stopReconciliationJob(): void {
   if (!reconciliationInterval) {
     return;

@@ -5,6 +5,12 @@ import { validateWebhookUrl } from "./webhookUrl";
 
 export { validateWebhookUrl } from "./webhookUrl";
 
+/**
+ * Computes an HMAC-SHA256 signature for a webhook payload using the provided secret.
+ * @param secret - The signing secret key
+ * @param body - The request body string to sign
+ * @returns A hex-encoded signature prefixed with "sha256="
+ */
 export function computeSignature(secret: string, body: string): string {
   return `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
 }
@@ -12,6 +18,12 @@ export function computeSignature(secret: string, body: string): string {
 const MAX_RETRIES = 5;
 const RETRY_DELAYS = [5, 15, 60, 300, 900]; // seconds: 5s, 15s, 60s, 300s, 900s
 
+/**
+ * Queues a webhook delivery for an event by inserting it into the webhook_deliveries table.
+ * Skips queuing if WEBHOOK_DESTINATION_URL is not set or the URL fails validation.
+ * @param event - The event type name (e.g. "created", "claimed")
+ * @param data - The event payload data, must contain a stream_id or id field
+ */
 export const triggerWebhook = async (event: string, data: any): Promise<void> => {
   const url = process.env.WEBHOOK_DESTINATION_URL;
 
@@ -58,6 +70,12 @@ export const triggerWebhook = async (event: string, data: any): Promise<void> =>
   }
 };
 
+/**
+ * Retrieves failed webhook deliveries from the dead-letter table with pagination.
+ * @param limit - Maximum number of dead letters to return (default 100)
+ * @param offset - Number of dead letters to skip for pagination (default 0)
+ * @returns Array of dead-letter webhook delivery records
+ */
 export function getDeadLetters(limit = 100, offset = 0): any[] {
   const db = getDb();
   return db
@@ -65,6 +83,10 @@ export function getDeadLetters(limit = 100, offset = 0): any[] {
     .all(limit, offset);
 }
 
+/**
+ * Counts the total number of failed webhook deliveries in the dead-letter table.
+ * @returns The count of dead-letter records
+ */
 export function countDeadLetters(): number {
   const db = getDb();
   const row = db
@@ -73,6 +95,11 @@ export function countDeadLetters(): number {
   return row.count;
 }
 
+/**
+ * Moves a dead-letter webhook delivery back to the active delivery queue for immediate retry.
+ * @param id - The dead-letter record ID to requeue
+ * @returns True if the requeue succeeded, false if the record was not found
+ */
 export function requeueDeadLetter(id: number): boolean {
   const db = getDb();
   
@@ -100,6 +127,12 @@ export function requeueDeadLetter(id: number): boolean {
   })();
 }
 
+/**
+ * Returns the delay in seconds before the next retry attempt based on the attempt number.
+ * Uses exponential backoff: 5s, 15s, 60s, 300s, 900s.
+ * @param attemptNumber - The zero-indexed attempt number
+ * @returns The number of seconds to wait before retrying
+ */
 export function getRetryDelaySeconds(attemptNumber: number): number {
   if (attemptNumber < 0 || attemptNumber >= RETRY_DELAYS.length) {
     return RETRY_DELAYS[RETRY_DELAYS.length - 1];

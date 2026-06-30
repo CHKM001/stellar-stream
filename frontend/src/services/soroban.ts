@@ -40,6 +40,9 @@ export interface ClaimResponse {
   history: StreamEvent[];
 }
 
+/**
+ * Custom error class for Soroban claim failures, including an error code.
+ */
 export class SorobanClaimError extends Error {
   code: string;
   constructor(message: string, code: string) {
@@ -219,6 +222,7 @@ export async function claimWithFreighter(
 }
 
 export const claimOnChain = claimWithFreighter;
+/** Alias for claimWithFreighter for backwards compatibility. */
 export const claimStream = claimWithFreighter;
 
 export interface ClaimableBatchResponse {
