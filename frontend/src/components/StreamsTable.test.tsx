@@ -7,19 +7,21 @@ import { Stream } from "../types/stream";
 const noop = vi.fn().mockResolvedValue(undefined);
 
 function createMockStream(id: string, status: Stream["progress"]["status"] = "active"): Stream {
+  const now = Math.floor(Date.now() / 1000);
+  const startAt = now - 200;
   return {
     id,
     sender: "G_SENDER123456789012345678901234567890123456789012345678901",
     recipient: "G_RECIPIENT123456789012345678901234567890123456789012345",
     assetCode: "USDC",
     totalAmount: 100,
-    durationSeconds: 3600,
-    startAt: 1670000000,
-    createdAt: 1670000000,
+    durationSeconds: 1000,
+    startAt,
+    createdAt: now,
     progress: {
       status,
-      ratePerSecond: 0.01,
-      elapsedSeconds: 100,
+      ratePerSecond: 0.1,
+      elapsedSeconds: 200,
       vestedAmount: 20,
       remainingAmount: 80,
       percentComplete: 20,
@@ -167,16 +169,27 @@ describe("StreamsTable infinite scroll", () => {
     expect(screen.getByText(/End of results/i)).toBeInTheDocument();
   });
 
+  function createIntersectionObserverMock() {
+    let observerCallback: IntersectionObserverCallback = () => {};
+    const MockObserver = class {
+      constructor(callback: IntersectionObserverCallback) {
+        observerCallback = callback;
+      }
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      root = null;
+      rootMargin = "";
+      thresholds = [];
+    };
+    return { MockObserver, getCallback: () => observerCallback };
+  }
+
   it("calls onLoadMore when sentinel becomes visible", () => {
     const onLoadMore = vi.fn();
-    let observerCallback: IntersectionObserverCallback = () => {};
+    const { MockObserver, getCallback } = createIntersectionObserverMock();
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    vi.spyOn(window, "IntersectionObserver").mockImplementation(MockObserver as unknown as typeof IntersectionObserver);
 
     render(
       <StreamsTable
@@ -189,21 +202,16 @@ describe("StreamsTable infinite scroll", () => {
 
     // Simulate sentinel becoming visible
     const sentinel = screen.getByTestId("infinite-scroll-sentinel");
-    observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
+    getCallback()([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 
   it("does not call onLoadMore when hasMore is false", () => {
     const onLoadMore = vi.fn();
-    let observerCallback: IntersectionObserverCallback = () => {};
+    const { MockObserver, getCallback } = createIntersectionObserverMock();
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    vi.spyOn(window, "IntersectionObserver").mockImplementation(MockObserver as unknown as typeof IntersectionObserver);
 
     render(
       <StreamsTable
@@ -215,21 +223,16 @@ describe("StreamsTable infinite scroll", () => {
     );
 
     const sentinel = screen.getByTestId("infinite-scroll-sentinel");
-    observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
+    getCallback()([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).not.toHaveBeenCalled();
   });
 
   it("does not call onLoadMore when already loadingMore", () => {
     const onLoadMore = vi.fn();
-    let observerCallback: IntersectionObserverCallback = () => {};
+    const { MockObserver, getCallback } = createIntersectionObserverMock();
 
-    vi.spyOn(window, "IntersectionObserver").mockImplementation(
-      (callback) => {
-        observerCallback = callback;
-        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn(), root: null, rootMargin: "", thresholds: [] };
-      },
-    );
+    vi.spyOn(window, "IntersectionObserver").mockImplementation(MockObserver as unknown as typeof IntersectionObserver);
 
     render(
       <StreamsTable
@@ -241,7 +244,7 @@ describe("StreamsTable infinite scroll", () => {
     );
 
     const sentinel = screen.getByTestId("infinite-scroll-sentinel");
-    observerCallback([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
+    getCallback()([{ isIntersecting: true, target: sentinel } as unknown as IntersectionObserverEntry], null!);
 
     expect(onLoadMore).not.toHaveBeenCalled();
   });
@@ -250,7 +253,7 @@ describe("StreamsTable infinite scroll", () => {
 describe("StreamsTable WebSocket progress updates", () => {
   beforeEach(() => {
     localStorage.clear();
-    vi.stubEnv("VITE_WS_URL", "");
+    vi.stubEnv("VITE_WS_URL", "ws://localhost:9999");
   });
 
   afterEach(() => {
@@ -264,7 +267,7 @@ describe("StreamsTable WebSocket progress updates", () => {
     expect(screen.getByText(/Live updates paused/i)).toBeInTheDocument();
   });
 
-  it("updates progress bar when WebSocket message received", () => {
+  it("shows progress bar with correct percentage and countdown", () => {
     const streams = [
       createMockStream("1", "active"),
       createMockStream("2", "active"),
@@ -272,14 +275,18 @@ describe("StreamsTable WebSocket progress updates", () => {
     
     render(<StreamsTable {...defaultProps} streams={streams} />);
     
-    // Initial progress for stream 1
-    const initialProgress = screen.getByText("20%");
-    expect(initialProgress).toBeInTheDocument();
+    const progressCells = screen.getAllByText("20%");
+    expect(progressCells).toHaveLength(2);
+    expect(progressCells[0]).toBeInTheDocument();
     
-    // Full integration testing would require:
-    // 1. Mocking useWebSocket hook to capture onMessage callback
-    // 2. Simulating a stream_progress message with { streamId: "1", progress: { percentComplete: 50 } }
-    // 3. Asserting the progress bar for stream 1 updates to "50%"
-    // The component structure is in place to handle this via streamProgressUpdates Map
+    // Countdown timer is shown for active streams
+    const countdowns = document.querySelectorAll(".progress-countdown");
+    expect(countdowns.length).toBeGreaterThan(0);
+    expect(countdowns[0].textContent).toMatch(/\d+m \d+s/);
+    
+    // Vested / total display
+    const vestedSpans = document.querySelectorAll(".muted");
+    expect(vestedSpans.length).toBeGreaterThan(0);
+    expect(vestedSpans[0].textContent).toContain("USDC");
   });
 });

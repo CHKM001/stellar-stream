@@ -8,6 +8,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import { useLiveProgress } from "../hooks/useLiveProgress";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Stream } from "../types/stream";
 import { getExportCsvUrl, ListStreamsFilters, cancelStream } from "../services/api";
@@ -628,6 +629,47 @@ interface StreamRowProps {
   onOpenStream?: (streamId: string) => void;
 }
 
+const LiveProgressCell = memo(function LiveProgressCell({
+  stream,
+  assetCode,
+}: {
+  stream: Stream;
+  assetCode: string;
+}) {
+  const live = useLiveProgress(stream);
+  const isCompleted = live.status === "completed";
+  return (
+    <>
+      <div className="progress-copy">
+        <strong>{Math.round(live.percentComplete)}%</strong>
+        {live.countdownText && (
+          <span
+            className="progress-countdown"
+            style={{
+              fontSize: "0.82rem",
+              marginLeft: "0.5rem",
+              color: "var(--color-muted)",
+            }}
+          >
+            {isCompleted ? "" : live.countdownText}
+          </span>
+        )}
+        <span className="muted">
+          Vested: {live.vestedAmount} / {stream.totalAmount} {assetCode}
+        </span>
+      </div>
+      <div className="progress-bar" aria-hidden>
+        <div
+          style={{
+            width: `${Math.min(live.percentComplete, 100)}%`,
+            background: isCompleted ? "var(--color-success, #10b981)" : undefined,
+          }}
+        />
+      </div>
+    </>
+  );
+});
+
 const StreamRow = memo(function StreamRow({
   stream,
   isScheduled,
@@ -693,19 +735,7 @@ const StreamRow = memo(function StreamRow({
           <td>{stream.pausedDuration ?? 0}s</td>
         )}
         <td>
-          <div className="progress-copy">
-            <strong>{stream.progress.percentComplete}%</strong>
-            <span className="muted">
-              Vested: {stream.progress.vestedAmount} {stream.assetCode}
-            </span>
-          </div>
-          <div className="progress-bar" aria-hidden>
-            <div
-              style={{
-                width: `${Math.min(stream.progress.percentComplete, 100)}%`,
-              }}
-            />
-          </div>
+          <LiveProgressCell stream={stream} assetCode={stream.assetCode} />
         </td>
         <td>
           <div className="status-cell">
