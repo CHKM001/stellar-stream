@@ -566,6 +566,52 @@ it("returns 400 when durationSeconds is zero", async () => {
       ]),
     );
   });
+
+  it("returns 400 when startAt is in the past", async () => {
+    const response = await request(app)
+      .post("/api/streams")
+      .set("Authorization", "Bearer mock_token")
+      .send({
+        sender: SENDER_A,
+        recipient: RECIPIENT_1,
+        assetCode: "USDC",
+        totalAmount: 100,
+        durationSeconds: 120,
+        startAt: Math.floor(Date.now() / 1000) - 60,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(response.body.error).toContain("startAt must be at least 10 seconds in the future");
+    expect(response.body.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "startAt" }),
+      ]),
+    );
+  });
+
+  it("returns 400 when startAt is less than 10 seconds in the future", async () => {
+    const response = await request(app)
+      .post("/api/streams")
+      .set("Authorization", "Bearer mock_token")
+      .send({
+        sender: SENDER_A,
+        recipient: RECIPIENT_1,
+        assetCode: "USDC",
+        totalAmount: 100,
+        durationSeconds: 120,
+        startAt: Math.floor(Date.now() / 1000) + 5,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(response.body.error).toContain("startAt must be at least 10 seconds in the future");
+    expect(response.body.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: "startAt" }),
+      ]),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -73,7 +73,15 @@ export const createStreamPayloadSchema = z
       });
     }
     if (payload.startAt !== undefined) {
-      const maxFutureTimestamp = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.startAt < now + 10) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["startAt"],
+          message: "startAt must be at least 10 seconds in the future.",
+        });
+      }
+      const maxFutureTimestamp = now + 365 * 24 * 60 * 60;
       if (payload.startAt > maxFutureTimestamp) {
         ctx.addIssue({
           code: "custom",
@@ -109,7 +117,15 @@ export function createStreamPayloadWithAllowedAssetsSchema(
 export const updateStreamStartAtSchema = z.object({
   startAt: unixTimestampSchema,
 }).superRefine((payload, ctx) => {
-  const maxFutureTimestamp = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.startAt < now + 10) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["startAt"],
+      message: "startAt must be at least 10 seconds in the future.",
+    });
+  }
+  const maxFutureTimestamp = now + 365 * 24 * 60 * 60;
   if (payload.startAt > maxFutureTimestamp) {
     ctx.addIssue({
       code: "custom",

@@ -188,6 +188,40 @@ describe("Create Stream Payload Schema", () => {
         expect(result.success).toBe(true);
     });
 
+    it("should reject startAt in the past", () => {
+        const payload = {
+            ...validBasePayload,
+            startAt: Math.floor(Date.now() / 1000) - 100,
+        };
+
+        const result = createStreamPayloadSchema.safeParse(payload);
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain("startAt");
+        expect(result.error?.issues[0].message).toContain("10 seconds in the future");
+    });
+
+    it("should reject startAt less than 10 seconds in the future", () => {
+        const payload = {
+            ...validBasePayload,
+            startAt: Math.floor(Date.now() / 1000) + 5,
+        };
+
+        const result = createStreamPayloadSchema.safeParse(payload);
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain("startAt");
+        expect(result.error?.issues[0].message).toContain("10 seconds in the future");
+    });
+
+    it("should accept startAt exactly 10 seconds in the future", () => {
+        const payload = {
+            ...validBasePayload,
+            startAt: Math.floor(Date.now() / 1000) + 10,
+        };
+
+        const result = createStreamPayloadSchema.safeParse(payload);
+        expect(result.success).toBe(true);
+    });
+
     it("should reject durationSeconds = 0", () => {
         const payload = { ...validBasePayload, durationSeconds: 0 };
         const result = createStreamPayloadSchema.safeParse(payload);
