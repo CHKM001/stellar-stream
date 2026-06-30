@@ -193,6 +193,14 @@ export const senderAccountIdSchema = z.object({
   accountId: stellarAccountIdSchema,
 });
 
+export const bulkCancelStreamsSchema = z.object({
+  streamIds: z
+    .array(streamIdSchema)
+    .min(1, "At least one stream ID is required")
+    .max(20, "Maximum 20 stream IDs per request"),
+  sender: stellarAccountIdSchema,
+});
+
 export type CreateStreamPayload = z.infer<typeof createStreamPayloadSchema>;
 
 export type ValidationIssue = {
