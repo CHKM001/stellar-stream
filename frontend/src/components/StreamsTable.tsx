@@ -694,9 +694,9 @@ const StreamRow = memo(function StreamRow({
         )}
         <td>
           <div className="progress-copy">
-            <strong>{Number(stream.progress.percentComplete.toFixed(2))}%</strong>
+            <strong>{stream.progress.percentComplete.toFixed(2)}%</strong>
             <span className="muted">
-              Vested: {stream.progress.vestedAmount.toFixed(6)} {stream.assetCode}
+              Vested: {stream.progress.vestedAmount.toFixed(2)} {stream.assetCode}
             </span>
           </div>
           <div className="progress-bar" aria-hidden>
