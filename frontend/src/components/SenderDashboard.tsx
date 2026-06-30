@@ -252,10 +252,6 @@ export function SenderDashboard({
       const data = await listStreams({ sender: senderAddress! });
       setStreams(data.data);
 
-      // Refresh events
-      const recentEvents = await getSenderEvents(senderAddress!);
-      setEvents(recentEvents);
-
       setShowCreateForm(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to create stream.";
